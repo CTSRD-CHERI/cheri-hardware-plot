@@ -1,0 +1,176 @@
+#! /usr/bin/env python3
+#-
+# Copyright (c) 2017 Alexandre Joannou
+# All rights reserved.
+#
+# This software was developed by SRI International and the University of
+# Cambridge Computer Laboratory under DARPA/AFRL contract FA8750-10-C-0237
+# ("CTSRD"), as part of the DARPA CRASH research programme.
+#
+# Redistribution and use in source and binary forms, with or without
+# modification, are permitted provided that the following conditions
+# are met:
+# 1. Redistributions of source code must retain the above copyright
+#    notice, this list of conditions and the following disclaimer.
+# 2. Redistributions in binary form must reproduce the above copyright
+#    notice, this list of conditions and the following disclaimer in the
+#    documentation and/or other materials provided with the distribution.
+#
+# THIS SOFTWARE IS PROVIDED BY THE AUTHOR AND CONTRIBUTORS ``AS IS'' AND
+# ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+# IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+# ARE DISCLAIMED.  IN NO EVENT SHALL THE AUTHOR OR CONTRIBUTORS BE LIABLE
+# FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+# DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS
+# OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
+# HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
+# LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
+# OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
+# SUCH DAMAGE.
+#
+
+from drawplot.data import import_data
+from drawplot.plot import plot, GraphType
+#from drawplot.box_plot import box_plot
+
+import argparse
+import os.path as op
+import matplotlib.pyplot as plt
+from matplotlib import rc
+rc('font',**{'family':'serif','serif':['Computer Modern Roman']})
+rc('text', usetex=True)
+
+################################
+# Parse command line arguments #
+################################
+
+parser = argparse.ArgumentParser(description='Plot CHERI hardware counters.')
+
+subcmds = parser.add_subparsers(dest='subcmd',metavar='sub-command',
+        help="Individual sub-command help available by invoking it with -h or --help.")
+subcmds.required = True
+
+# common parser
+common = argparse.ArgumentParser(add_help=False)
+common.add_argument('csv', type=str, nargs='+', metavar='CSV_FILE',
+        help="CSV_FILE(s) with libstatcounter\'s data")
+common.add_argument('--fig-size', type=float, nargs=2, default=[10,6], metavar=('WIDTH','HEIGHT'),
+        help="The matplotlib figure WIDTH and HEIGHT (default WIDTH=10, HEIGHT=6).")
+common.add_argument('--output', type=str, default=None, metavar=('OUTFILE'),
+        help="OUTFILE, path to the output file. When not specified, the figure is output in the current directory.")
+
+# bars parser
+bars = argparse.ArgumentParser(add_help=False)
+bars.add_argument('--benchs', default=None, type=str, nargs='+', action='append', metavar='BENCH',
+        help="A sequence of BENCH(s) to use for the plot. When called several times, it separates the BENCH(s) in different groups.")
+bars.add_argument('--config', default=None, type=str, nargs=4, action='append', choices=['beri','mips','cheri128','cheri256','0','0_256'], metavar=('BITFILE_CPU','SDK_CPU','TGT_ARCH_CPU','TSTRUCT'),
+        help="Adds the ('BITFILE_CPU','SDK_CPU','TGT_ARCH_CPU','TSTRUCT') configuration to the plot.")
+metrics = ['cycles', 'instructions', 'itlb_miss', 'dtlb_miss', 'tlb_inst_share',
+'icache_write_hit', 'icache_write_miss', 'icache_read_hit', 'icache_read_miss', 'icache_evict',
+'dcache_write_hit', 'dcache_write_miss', 'dcache_read_hit', 'dcache_read_miss', 'dcache_evict', 'dcache_set_tag_write', 'dcache_set_tag_read',
+'l2cache_write_hit', 'l2cache_write_miss', 'l2cache_read_hit', 'l2cache_read_miss', 'l2cache_evict', 'l2cache_set_tag_write', 'l2cache_set_tag_read',
+'tagcache_write_hit', 'tagcache_write_miss', 'tagcache_read_hit', 'tagcache_read_miss', 'tagcache_evict',
+'mipsmem_byte_read', 'mipsmem_byte_write', 'mipsmem_hword_read', 'mipsmem_hword_write', 'mipsmem_word_read', 'mipsmem_word_write', 'mipsmem_dword_read', 'mipsmem_dword_write', 'mipsmem_cap_read', 'mipsmem_cap_write',
+'l2cachemaster_read_req', 'l2cachemaster_write_req', 'l2cachemaster_write_req_flit', 'l2cachemaster_read_rsp', 'l2cachemaster_read_rsp_flit', 'l2cachemaster_write_rsp',
+'tagcachemaster_read_req', 'tagcachemaster_write_req', 'tagcachemaster_write_req_flit', 'tagcachemaster_read_rsp', 'tagcachemaster_read_rsp_flit', 'tagcachemaster_write_rsp',
+'cpi', 'tlb_miss',
+'icache_misses', 'icache_hits', 'icache_accesses', 'icache_read_miss_rate', 'icache_read_hit_rate',
+'dcache_misses', 'dcache_hits', 'dcache_accesses', 'dcache_read_miss_rate', 'dcache_read_hit_rate',
+'l2cache_misses', 'l2cache_hits', 'l2cache_accesses', 'l2cache_read_miss_rate', 'l2cache_read_hit_rate', 'l2cache_req_flits', 'l2cache_rsp_flits', 'l2cache_flits',
+'mem_bytes_read', 'mem_bytes_write', 'mem_bytes', 'tagcache_req_flits', 'tagcache_rsp_flits', 'tagcache_flits', 'dram_req_flits', 'dram_rsp_flits', 'dram_flits',
+'tags_req_flits', 'tags_rsp_flits', 'tags_flits', 'tags_dram_overhead', 'dram_inst_share']
+bars.add_argument('--metrics', default=['cycles'], type=str, nargs='+', choices=metrics, metavar='METRIC',
+        help="Metric(s) to compare benchmarks against. One or more of {}.".format(', '.join(metrics)))
+bars.add_argument('--label', default=None, type=str, metavar='LABEL',
+        help="Prints LABEL in the legend.")
+bars.add_argument('--ylim', type=float, nargs=2, default=None, metavar=('YMIN','YMAX'),
+        help="The matplotlib figure ylim YMIN and YMAX (default YMIN=0.0, YMAX=2.0).")
+bars.add_argument('--size-ratios', type=float, nargs=4, default=(0.3,0.7,1.7,1.2), metavar=('BAR_SPACE','BENCH_SPACE','FAMILY_SPACE','BUFFER'),
+        help="Whitespaces width ratio to barwidth for BAR_SPACE, BENCH_SPACE, FAMILY_SPACE and BUFFER.")
+bars.add_argument('--metrics-in-legend', action='store_true',
+        help="Display metric name in legend.")
+bars.add_argument('--archs-in-legend', action='store_true',
+        help="Display arch name in legend.")
+bars.add_argument('--sdks-in-legend', action='store_true',
+        help="Display sdk name in legend.")
+bars.add_argument('--bitfiles-in-legend', action='store_true',
+        help="Display bitfile name in legend.")
+bars.add_argument('--tstructs-in-legend', action='store_true',
+        help="Display tag table structure style in legend.")
+bars.add_argument('--legend-columns', type=int, default=None, metavar='NCOLS',
+        help="Number of columns in the legend.")
+leg_loc = ['top-left','outside']
+bars.add_argument('--legend-location', type=str, default="top-left", choices=leg_loc, metavar='POS',
+        help="Where to position the legend. One of {}.".format(", ".join(leg_loc)))
+bars.add_argument('--y-as-percent', action='store_true',
+        help="Display y-axis as percents (useful for derived ratio metric columns or overhead graphs).")
+
+# specific commands
+cmd_bar_plot_o = subcmds.add_parser('bar-plot-overheads', parents=[common, bars],
+        help="Generate a bar plot of overheads.")
+cmd_bar_plot_o.add_argument('--baseline', type=str, nargs=4, default=['cheri256','cheri256','mips','0'], choices=['beri','mips','cheri128','cheri256','0','0_256'], metavar=('BITFILE_CPU','SDK_CPU','TGT_ARCH_CPU','TSTRUCT'),
+        help="The configuration to use as baseline: BITFILE_CPU SDK_CPU TGT_ARCH_CPU TSTRUCT (default is cheri256 cheri256 mips 0).")
+cmd_bar_plot = subcmds.add_parser('bar-plot', parents=[common, bars],
+        help="Generate a bar plot of raw data.")
+cmd_box_plot_o = subcmds.add_parser('box-plot-overheads', parents=[common, bars],
+        help="Generate a box plot of overheads")
+cmd_box_plot_o.add_argument('--baseline', type=str, nargs=4, default=['cheri256','cheri256','mips','0'], choices=['beri','mips','cheri128','cheri256','0','0_256'], metavar=('BITFILE_CPU','SDK_CPU','TGT_ARCH_CPU','TSTRUCT'),
+        help="The configuration to use as baseline: BITFILE_CPU SDK_CPU TGT_ARCH_CPU TSTRUCT (default is cheri256 cheri256 mips 0).")
+
+#################
+# main function #
+#################
+
+def main(args):
+
+    data = import_data(args.csv)
+    #data.to_csv("toto.csv")
+
+    #########
+    # graph #
+    #########
+
+    ext = "pdf"
+    outfile = op.join(op.curdir,"{}.{}".format(args.subcmd,ext))
+    fig, ax = plt.subplots()
+    if args.subcmd in ["bar-plot","bar-plot-overheads","box-plot-overheads"]:
+        kwargs = {
+            'configs': args.config,
+            'metrics': args.metrics,
+            'benchs': args.benchs,
+            'lbl': args.label,
+            'ylim': args.ylim,
+            'size_ratios': args.size_ratios,
+            'archs_in_legend': args.archs_in_legend,
+            'sdks_in_legend': args.sdks_in_legend,
+            'bitfiles_in_legend': args.bitfiles_in_legend,
+            'tstructs_in_legend': args.tstructs_in_legend,
+            'legend_columns': args.legend_columns,
+            'legend_location': args.legend_location,
+            'metrics_in_legend': args.metrics_in_legend,
+            'y_as_percent': args.y_as_percent
+        }
+        if args.subcmd == "bar-plot-overheads":
+            plot(ax, data, gtype=GraphType.bar, baseline=args.baseline, **kwargs)
+        elif args.subcmd == "bar-plot":
+            plot(ax, data, gtype=GraphType.bar, **kwargs)
+        elif args.subcmd == "box-plot-overheads":
+            #box_plot(ax, data, baseline=args.baseline, **kwargs)
+            plot(ax, data, gtype=GraphType.box, baseline=args.baseline, **kwargs)
+        outfile = op.join(op.curdir,"{}-{}.{}".format(args.subcmd,"_".join(args.metrics),ext))
+    else:
+        exit(-1)
+
+    if args.output:
+        outfile = args.output
+    fig.set_size_inches(args.fig_size)
+    fig.savefig(outfile,bbox_inches = 'tight')
+
+    #######
+    # end #
+    #######
+    exit(0)
+
+if __name__ == "__main__":
+    # parse the arguments
+    main(parser.parse_args())
