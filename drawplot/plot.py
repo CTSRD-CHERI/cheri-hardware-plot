@@ -200,8 +200,9 @@ def draw (
     # return the axis and x-ticks
     return ax, xticks, xticklabels, rows
 
+stupidlyhigh = 1000000000000
 def draw_table(
-        ax, rows, benchs, confs, metrics, widths,
+        ax, rows, benchs, confs, metrics, widths, row_height,
         archs_in_rowlabel, sdks_in_rowlabel, bitfiles_in_rowlabel, tstructs_in_rowlabel):
     colw = [widths.buffers - widths.bench_spaces/2.0]
     cellc = ['lightgrey']
@@ -233,14 +234,15 @@ def draw_table(
     else:
         rowlabel = None
 
-    ax.table(
+    tbl = ax.table(
             colWidths=list(map(lambda x: x/100.0,colw)),
             cellColours=[cellc]*len(rows),
             cellText=[['']+r+[''] for r in rows.values()],
             rowLabels=rowlbl)
-            #bbox=[0,0,0.5,-0.2])
-            #rowLabels=['a','b'],
-            #colLabels=['toto','titi'])
+    for cell in tbl.properties()['child_artists']:
+        dflt_h = cell.get_height()
+        print(dflt_h/stupidlyhigh)
+        cell.set_height(stupidlyhigh*row_height)
     return ax
 
 
@@ -329,7 +331,7 @@ def plot (
     if not tabulate:
         ax0 = fig.add_subplot(1,1,1)
     else:
-        gs = gridspec.GridSpec(2,1,height_ratios=[1000000000000,1]) # TODO more elegant way ?
+        gs = gridspec.GridSpec(2,1,height_ratios=[stupidlyhigh,1]) # TODO more elegant way ?
         ax1 = fig.add_subplot(gs[1])
         ax0 = fig.add_subplot(gs[0])
         fig.subplots_adjust(hspace=0.05)
@@ -342,8 +344,9 @@ def plot (
         a.tick_params(which='both', bottom='off', top='off',right='off')
         a.set_xticklabels([])
 
+    rowheight=10
     if rows:
-        ax = draw_table(ax1,rows,benchs,configs,metrics,widths,archs_in_rowlabel, sdks_in_rowlabel,bitfiles_in_rowlabel, tstructs_in_rowlabel)
+        ax = draw_table(ax1,rows,benchs,configs,metrics,widths,rowheight*0.004,archs_in_rowlabel, sdks_in_rowlabel,bitfiles_in_rowlabel, tstructs_in_rowlabel)
         ax.yaxis.set_visible(False)
         for s in ax.spines.values():
             s.set_visible(False)
@@ -354,8 +357,7 @@ def plot (
     ax.tick_params(which='both', bottom='off', top='off',right='off')
     if tabulate:
         padoffset=5
-        rowheight=12
-        ax.tick_params(axis='x', which='major', pad=padoffset + rowheight*len(tabulate))
+        ax.tick_params(axis='x', which='major', pad=padoffset + 1.2*rowheight*len(tabulate))
     if ylim:
         ax0.set_ylim(*ylim)
     ax0.yaxis.grid(zorder=0)
