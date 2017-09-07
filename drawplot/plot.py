@@ -239,9 +239,10 @@ def draw_table(
             cellColours=[cellc]*len(rows),
             cellText=[['']+r+[''] for r in rows.values()],
             rowLabels=rowlbl)
+    tbl.set_fontsize(16)
     for cell in tbl.properties()['child_artists']:
         dflt_h = cell.get_height()
-        print(dflt_h/stupidlyhigh)
+        #print(dflt_h/stupidlyhigh)
         cell.set_height(stupidlyhigh*row_height)
     return ax
 
