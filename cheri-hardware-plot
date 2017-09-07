@@ -104,6 +104,16 @@ bars.add_argument('--legend-location', type=str, default="top-left", choices=leg
         help="Where to position the legend. One of {}.".format(", ".join(leg_loc)))
 bars.add_argument('--y-as-percent', action='store_true',
         help="Display y-axis as percents (useful for derived ratio metric columns or overhead graphs).")
+bars.add_argument('--tabulate', default=None, type=str, nargs=5, action='append', choices=['beri','mips','cheri128','cheri256','0','0_256']+metrics, metavar=('BITFILE_CPU','SDK_CPU','TGT_ARCH_CPU','TSTRUCT','METRIC'),
+        help="Tabulates data below graph for specified configuration and metric")
+bars.add_argument('--archs-in-rowlabel', action='store_true',
+        help="Display arch name in table rowlabel.")
+bars.add_argument('--sdks-in-rowlabel', action='store_true',
+        help="Display sdk name in table rowlabel.")
+bars.add_argument('--bitfiles-in-rowlabel', action='store_true',
+        help="Display bitfile name in table rowlabel.")
+bars.add_argument('--tstructs-in-rowlabel', action='store_true',
+        help="Display tag table structure style in table rowlabel.")
 
 # specific commands
 cmd_bar_plot_o = subcmds.add_parser('bar-plot-overheads', parents=[common, bars],
@@ -132,7 +142,7 @@ def main(args):
 
     ext = "pdf"
     outfile = op.join(op.curdir,"{}.{}".format(args.subcmd,ext))
-    fig, ax = plt.subplots()
+    fig = plt.figure()
     if args.subcmd in ["bar-plot","bar-plot-overheads","box-plot-overheads"]:
         kwargs = {
             'configs': args.config,
@@ -148,15 +158,20 @@ def main(args):
             'legend_columns': args.legend_columns,
             'legend_location': args.legend_location,
             'metrics_in_legend': args.metrics_in_legend,
-            'y_as_percent': args.y_as_percent
+            'y_as_percent': args.y_as_percent,
+            'tabulate': args.tabulate,
+            'archs_in_rowlabel': args.archs_in_rowlabel,
+            'sdks_in_rowlabel': args.sdks_in_rowlabel,
+            'bitfiles_in_rowlabel': args.bitfiles_in_rowlabel,
+            'tstructs_in_rowlabel': args.tstructs_in_rowlabel
         }
         if args.subcmd == "bar-plot-overheads":
-            plot(ax, data, gtype=GraphType.bar, baseline=args.baseline, **kwargs)
+            plot(fig, data, gtype=GraphType.bar, baseline=args.baseline, **kwargs)
         elif args.subcmd == "bar-plot":
-            plot(ax, data, gtype=GraphType.bar, **kwargs)
+            plot(fig, data, gtype=GraphType.bar, **kwargs)
         elif args.subcmd == "box-plot-overheads":
-            #box_plot(ax, data, baseline=args.baseline, **kwargs)
-            plot(ax, data, gtype=GraphType.box, baseline=args.baseline, **kwargs)
+            #box_plot(fig, data, baseline=args.baseline, **kwargs)
+            plot(fig, data, gtype=GraphType.box, baseline=args.baseline, **kwargs)
         outfile = op.join(op.curdir,"{}-{}.{}".format(args.subcmd,"_".join(args.metrics),ext))
     else:
         exit(-1)

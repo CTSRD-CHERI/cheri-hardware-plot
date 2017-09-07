@@ -35,13 +35,16 @@ from enum import Enum
 from drawplot.data import index_cat_data, std_norm, overheads2median
 from drawplot.plot_params import element_spaces_conf, element_color, element_hatch, bench_name, arch_name, tstruct_name
 
+from collections import defaultdict
+from matplotlib import gridspec
+
 # type of graph enum
 GraphType = Enum('GraphType', ['bar','box'])
 
 ###############################################################################
 # internal graph draw function
 def draw (
-        ax, families, confs, metrics, widths,
+        ax, families, confs, metrics, widths, tabulate,
         gtype=GraphType.bar, baseline=None, y_as_percent=False):
     """
     Wraps the matplotlib call to the bar() / boxplot() method.
@@ -53,6 +56,7 @@ def draw (
     confs    -- A sequence of configuration tuples
              (bitfile-cpu, sdk-cpu, target-arch-cpu, table-struct).
     widths   -- An instance of then Widths namedtuple. See plot_params.py.
+    tabulate -- Sequence of configs to tabulate
 
     Keyword arguments
     -----------------
@@ -63,14 +67,15 @@ def draw (
 
     Return
     ------
-    A tuple of the Axes object, the sequence of x-ticks positions and the
-    sequence of x-ticks labels.
+    A tuple of the Axes object, the sequence of x-ticks positions, the
+    sequence of x-ticks labels and the sequence of rows to tabulate.
     """
     pos         = widths.buffers
     max_y       = None
     min_y       = None
     xticks      = []
     xticklabels = []
+    rows = defaultdict(list)
     # for each family of benchmarks
     ###########################################################################
     for i,family in enumerate(families):
@@ -95,6 +100,7 @@ def draw (
                         level=(
                             'bitfile-cpu','sdk-cpu',
                             'target-arch-cpu','table-struct'))
+                row=conf+[metric]
                 ############
                 # Bar plot #
                 ###############################################################
@@ -138,6 +144,11 @@ def draw (
                             widths=widths.elements)
                     pos += widths.elements/2.0
                 ###############################################################
+                if tabulate and row in tabulate:
+                    if y_as_percent:
+                        rows[tuple(row)].append("{:5.2f}\%".format(100*y if not baseline else 100*(y-1)))
+                    else:
+                        rows[tuple(row)].append("{:7.3f}".format(y))
                 # skip space between plot elements
                 if k < (len(confs) * len(metrics)) - 1:
                     pos += widths.element_spaces
@@ -152,6 +163,9 @@ def draw (
         if i < len(families) - 1:
             #ax.axvline(x=pos+widths.family_spaces/2.0, ymin=-100, color='grey', linewidth=1, linestyle=":", zorder=20)
             pos += widths.family_spaces
+            if tabulate:
+                for row in rows.values():
+                    row.append('')
 
     ###########################################################################
     # y axis handling
@@ -163,6 +177,9 @@ def draw (
             nb_decimals=1
             nb_steps = 6
         step = np.round((max_y - min_y) / nb_steps,decimals=nb_decimals)
+        while step == 0:
+            nb_decimals += 1
+            step = np.round((max_y - min_y) / nb_steps,decimals=nb_decimals)
         yhi = max_y + (step - max_y % step)
         ylo = min_y - min_y % step if baseline else 0.0
         yticks = np.arange(np.round(ylo,decimals=nb_decimals),yhi+step,step)
@@ -181,15 +198,63 @@ def draw (
             ax.set_yticklabels(map(lambda x: "{:+5.0f}\%".format(100*x),ax.get_yticks()))
 
     # return the axis and x-ticks
-    return ax, xticks, xticklabels
+    print("rows={}".format(rows if tabulate else {}))
+    return ax, xticks, xticklabels, rows
+
+def draw_table(
+        ax, rows, benchs, confs, metrics, widths,
+        archs_in_rowlabel, sdks_in_rowlabel, bitfiles_in_rowlabel, tstructs_in_rowlabel):
+    colw = [widths.buffers - widths.bench_spaces/2.0]
+    cellc = ['lightgrey']
+    nconfs = len(confs)
+    nmetrics = len(metrics)
+    for i,bs in enumerate(benchs):
+        for j,b in enumerate(bs):
+            colw.append(nconfs*nmetrics*widths.elements + (nconfs*nmetrics-1)*widths.element_spaces + widths.bench_spaces)
+            cellc.append('white')
+        if i < len(benchs) - 1:
+            colw.append(widths.family_spaces - widths.bench_spaces)
+            cellc.append('lightgrey')
+    colw.append(widths.buffers - widths.bench_spaces/2.0)
+    cellc.append('lightgrey')
+
+    rowlbl = []
+    for row in rows:
+        rowlbl.append('')
+
+    if archs_in_rowlabel:
+        for k,row in enumerate(rows.keys()):
+            rowlbl[k] = '{}'.format(arch_name(row[2]))
+            if sdks_in_rowlabel:
+                rowlbl[k] = '{} ({} SDK)'.format(rowlbl[k], tstruct_name(row[1]))
+            if bitfiles_in_rowlabel:
+                rowlbl[k] = '{} (on {} bitfile)'.format(rowlbl[k], tstruct_name(row[0]))
+            if tstructs_in_rowlabel:
+                rowlbl[k] = '{} ({} tag table)'.format(rowlbl[k], tstruct_name(row[3]))
+    else:
+        rowlabel = None
+
+    ax.table(
+            colWidths=list(map(lambda x: x/100.0,colw)),
+            cellColours=[cellc]*len(rows),
+            cellText=[['']+r+[''] for r in rows.values()],
+            rowLabels=rowlbl)
+            #bbox=[0,0,0.5,-0.2])
+            #rowLabels=['a','b'],
+            #colLabels=['toto','titi'])
+    return ax
+
+
 
 ###############################################################################
 # exported plotting function
 def plot (
-        ax, df, gtype, baseline=None, configs=None, benchs=None,
-        metrics=['cycles'], lbl=None, metrics_in_legend=False,
+        fig, df, gtype, baseline=None, configs=None, benchs=None,
+        metrics=['cycles'], tabulate=None, lbl=None, metrics_in_legend=False,
         archs_in_legend=False, sdks_in_legend=False, bitfiles_in_legend=False,
         tstructs_in_legend=False, legend_columns=None,
+        archs_in_rowlabel=False, sdks_in_rowlabel=False,
+        bitfiles_in_rowlabel=False, tstructs_in_rowlabel=False,
         legend_location="top-left", ylim=None, y_as_percent=False,
         size_ratios=(0.3, 0.7, 1.7, 1.2)):
     """
@@ -197,7 +262,7 @@ def plot (
 
     Positional arguments
     --------------------
-    ax    -- The maplotlib Axes object to be used to render the graph.
+    fig   -- The maplotlib Figure object to be used to render the graph.
     df    -- The pandas DataFrame with the data to plot.
     gtype -- The desired graph type. An instance of the GraphType Enum.
 
@@ -208,6 +273,7 @@ def plot (
                        (bitfile-cpu, sdk-cpu, target-arch-cpu, table-struct).
     benchs             -- A sequence of sequences of benchmark names.
     metrics            -- A sequence of metric names to plot.
+    tabulate           -- A sequence of configs/metrics to tabulate.
     lbl                -- A label to display in the legend.
     metrics_in_legend  -- A boolean for displaying metric names in legend.
     archs_in_legend    -- A boolean for displaying target architecture names
@@ -216,6 +282,10 @@ def plot (
     bitfiles_in_legend -- A boolean for displaying bitfile names in legend.
     tstruct_in_legend  -- A boolean for displaying tag-table structures in
                        legend.
+    archs_in_rowlabel  --
+    sdks_in_rowlabel   --
+    bitfiles_in_rowlabel --
+    tstructs_in_rowlabel --
     legend_columns     -- Number of columns in legend.
     legend_location    -- The legend location.
     ylim               -- Explicit limits on the y-axis (tuple (ymin, ymax)).
@@ -230,8 +300,15 @@ def plot (
     # prepare params
     if configs == None:
         configs=[['cheri256','cheri256','cheri256','0']]
+    prognames = df.index.get_level_values('progname').unique()
     if benchs == None:
-        benchs = [df.index.get_level_values('progname').unique()]
+        benchs = [prognames]
+    # check that all required benchmarks are present
+    else:
+        for b in [b for x in benchs for b in x]:
+            if not b in prognames:
+                print("{} is not a valid benchmark. Available benchmarks are: {}".format(b,prognames))
+                exit(-1)
     # select the rows we care about
     def f(prog, bitfile, sdk, arch, tstruct, confs, benchs_family):
         def conf_eq(conf):
@@ -250,15 +327,39 @@ def plot (
     # compute bar widths
     widths = element_spaces_conf(benchs, nb_confs=len(configs), nb_metrics=len(metrics), ratios=size_ratios)
 
-    ax, xticks, xticklabels = draw(ax, families, configs, metrics, widths, gtype, baseline, y_as_percent)
+    if not tabulate:
+        ax0 = fig.add_subplot(1,1,1)
+    else:
+        gs = gridspec.GridSpec(2,1,height_ratios=[1000000000000,1]) # TODO more elegant way ?
+        ax1 = fig.add_subplot(gs[1])
+        ax0 = fig.add_subplot(gs[0])
+        fig.subplots_adjust(hspace=0.05)
+
+    ax, xticks, xticklabels, rows = draw(ax0, families, configs, metrics, widths, tabulate, gtype, baseline, y_as_percent)
+
+    for a in fig.get_axes():
+        a.set_xlim(0,100.0)
+        a.set_xticks(xticks)
+        a.tick_params(which='both', bottom='off', top='off',right='off')
+        a.set_xticklabels([])
+
+    if rows:
+        ax = draw_table(ax1,rows,benchs,configs,metrics,widths,archs_in_rowlabel, sdks_in_rowlabel,bitfiles_in_rowlabel, tstructs_in_rowlabel)
+        ax.yaxis.set_visible(False)
+        for s in ax.spines.values():
+            s.set_visible(False)
 
     ax.set_xlim(0,100.0)
     ax.set_xticks(xticks)
     ax.set_xticklabels(xticklabels, va='top', ha='center', rotation=90)
     ax.tick_params(which='both', bottom='off', top='off',right='off')
+    if tabulate:
+        padoffset=5
+        rowheight=12
+        ax.tick_params(axis='x', which='major', pad=padoffset + rowheight*len(tabulate))
     if ylim:
-        ax.set_ylim(*ylim)
-    ax.yaxis.grid(zorder=0)
+        ax0.set_ylim(*ylim)
+    ax0.yaxis.grid(zorder=0)
     to_legend = []
     needs_legend = False
     if lbl:
@@ -285,4 +386,4 @@ def plot (
             ax.legend(title=lbl,handles=to_legend, borderaxespad=0, ncol=legend_columns, fontsize='small', loc='upper left', bbox_to_anchor=(0,1))
         elif legend_location == 'outside':
             ax.legend(title=lbl,handles=to_legend, borderaxespad=0, ncol=legend_columns, fontsize='small', loc='lower left', mode="expand", bbox_to_anchor=(0.0,1.02,1.0,0.02))
-    return ax
+    return ax.get_figure()
