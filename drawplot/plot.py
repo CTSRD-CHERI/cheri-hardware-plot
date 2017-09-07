@@ -198,7 +198,6 @@ def draw (
             ax.set_yticklabels(map(lambda x: "{:+5.0f}\%".format(100*x),ax.get_yticks()))
 
     # return the axis and x-ticks
-    print("rows={}".format(rows if tabulate else {}))
     return ax, xticks, xticklabels, rows
 
 def draw_table(
