@@ -382,7 +382,7 @@ def plot (
         if legend_columns == None:
             legend_columns = len(metrics) if metrics_in_legend else len(configs)
         if legend_location == "top-left":
-            ax.legend(title=lbl,handles=to_legend, borderaxespad=0, ncol=legend_columns, fontsize='small', loc='upper left', bbox_to_anchor=(0,1))
+            ax0.legend(title=lbl,handles=to_legend, borderaxespad=0, ncol=legend_columns, fontsize='small', loc='upper left', bbox_to_anchor=(0,1))
         elif legend_location == 'outside':
-            ax.legend(title=lbl,handles=to_legend, borderaxespad=0, ncol=legend_columns, fontsize='small', loc='lower left', mode="expand", bbox_to_anchor=(0.0,1.02,1.0,0.02))
+            ax0.legend(title=lbl,handles=to_legend, borderaxespad=0, ncol=legend_columns, fontsize='small', loc='lower left', mode="expand", bbox_to_anchor=(0.0,1.02,1.0,0.02))
     return ax.get_figure()
