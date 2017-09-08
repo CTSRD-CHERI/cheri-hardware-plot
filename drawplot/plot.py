@@ -239,7 +239,7 @@ def draw_table(
             cellColours=[cellc]*len(rows),
             cellText=[['']+r+[''] for r in rows.values()],
             rowLabels=rowlbl)
-    tbl.set_fontsize(16)
+    tbl.set_fontsize('xx-large')
     for cell in tbl.properties()['child_artists']:
         dflt_h = cell.get_height()
     return ax
@@ -330,7 +330,7 @@ def plot (
     if not tabulate:
         ax0 = fig.add_subplot(1,1,1)
     else:
-        gs = gridspec.GridSpec(2,1, height_ratios=(16,len(tabulate)))
+        gs = gridspec.GridSpec(2,1, height_ratios=(100,10*len(tabulate)))
         ax1 = fig.add_subplot(gs[1])
         ax0 = fig.add_subplot(gs[0])
         fig.subplots_adjust(hspace=0)
