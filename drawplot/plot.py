@@ -200,7 +200,6 @@ def draw (
     # return the axis and x-ticks
     return ax, xticks, xticklabels, rows
 
-stupidlyhigh = 1000000000000
 def draw_table(
         ax, rows, benchs, confs, metrics, widths, row_height,
         archs_in_rowlabel, sdks_in_rowlabel, bitfiles_in_rowlabel, tstructs_in_rowlabel):
@@ -235,6 +234,7 @@ def draw_table(
         rowlabel = None
 
     tbl = ax.table(
+            loc='center',
             colWidths=list(map(lambda x: x/100.0,colw)),
             cellColours=[cellc]*len(rows),
             cellText=[['']+r+[''] for r in rows.values()],
@@ -242,8 +242,6 @@ def draw_table(
     tbl.set_fontsize(16)
     for cell in tbl.properties()['child_artists']:
         dflt_h = cell.get_height()
-        #print(dflt_h/stupidlyhigh)
-        cell.set_height(stupidlyhigh*row_height)
     return ax
 
 
@@ -332,10 +330,10 @@ def plot (
     if not tabulate:
         ax0 = fig.add_subplot(1,1,1)
     else:
-        gs = gridspec.GridSpec(2,1,height_ratios=[stupidlyhigh,1]) # TODO more elegant way ?
+        gs = gridspec.GridSpec(2,1, height_ratios=(16,len(tabulate)))
         ax1 = fig.add_subplot(gs[1])
         ax0 = fig.add_subplot(gs[0])
-        fig.subplots_adjust(hspace=0.05)
+        fig.subplots_adjust(hspace=0)
 
     ax, xticks, xticklabels, rows = draw(ax0, families, configs, metrics, widths, tabulate, gtype, baseline, y_as_percent)
 
@@ -356,9 +354,6 @@ def plot (
     ax.set_xticks(xticks)
     ax.set_xticklabels(xticklabels, va='top', ha='center', rotation=90)
     ax.tick_params(which='both', bottom='off', top='off',right='off')
-    if tabulate:
-        padoffset=5
-        ax.tick_params(axis='x', which='major', pad=padoffset + 1.2*rowheight*len(tabulate))
     if ylim:
         ax0.set_ylim(*ylim)
     ax0.yaxis.grid(zorder=0)
