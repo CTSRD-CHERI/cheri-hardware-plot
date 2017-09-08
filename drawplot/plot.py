@@ -201,7 +201,7 @@ def draw (
     return ax, xticks, xticklabels, rows
 
 def draw_table(
-        ax, rows, benchs, confs, metrics, widths, row_height,
+        ax, rows, benchs, confs, metrics, widths,
         archs_in_rowlabel, sdks_in_rowlabel, bitfiles_in_rowlabel, tstructs_in_rowlabel):
     colw = [widths.buffers - widths.bench_spaces/2.0]
     cellc = ['lightgrey']
@@ -343,9 +343,8 @@ def plot (
         a.tick_params(which='both', bottom='off', top='off',right='off')
         a.set_xticklabels([])
 
-    rowheight=10
     if rows:
-        ax = draw_table(ax1,rows,benchs,configs,metrics,widths,rowheight*0.004,archs_in_rowlabel, sdks_in_rowlabel,bitfiles_in_rowlabel, tstructs_in_rowlabel)
+        ax = draw_table(ax1,rows,benchs,configs,metrics,widths,archs_in_rowlabel, sdks_in_rowlabel,bitfiles_in_rowlabel, tstructs_in_rowlabel)
         ax.yaxis.set_visible(False)
         for s in ax.spines.values():
             s.set_visible(False)
