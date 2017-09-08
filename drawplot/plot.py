@@ -146,7 +146,7 @@ def draw (
                 ###############################################################
                 if tabulate and row in tabulate:
                     if y_as_percent:
-                        rows[tuple(row)].append("{:5.2f}\%".format(100*y if not baseline else 100*(y-1)))
+                        rows[tuple(row)].append("{:5.2f}".format(100*y if not baseline else 100*(y-1)))
                     else:
                         rows[tuple(row)].append("{:7.3f}".format(y))
                 # skip space between plot elements
@@ -201,7 +201,8 @@ def draw (
     return ax, xticks, xticklabels, rows
 
 def draw_table(
-        ax, rows, benchs, confs, metrics, widths,
+        ax, rows, benchs, confs, metrics, widths, height_scaling,
+        y_as_percent,
         archs_in_rowlabel, sdks_in_rowlabel, bitfiles_in_rowlabel, tstructs_in_rowlabel):
     colw = [widths.buffers - widths.bench_spaces/2.0]
     cellc = ['lightgrey']
@@ -223,13 +224,13 @@ def draw_table(
 
     if archs_in_rowlabel:
         for k,row in enumerate(rows.keys()):
-            rowlbl[k] = '{}'.format(arch_name(row[2]))
+            rowlbl[k] = '{}{}'.format(arch_name(row[2]), ' (\%)' if y_as_percent else '')
             if sdks_in_rowlabel:
                 rowlbl[k] = '{} ({} SDK)'.format(rowlbl[k], tstruct_name(row[1]))
             if bitfiles_in_rowlabel:
                 rowlbl[k] = '{} (on {} bitfile)'.format(rowlbl[k], tstruct_name(row[0]))
             if tstructs_in_rowlabel:
-                rowlbl[k] = '{} ({} tag table)'.format(rowlbl[k], tstruct_name(row[3]))
+                rowlbl[k] = '{} tag table\n{}'.format(tstruct_name(row[3]), rowlbl[k])
     else:
         rowlabel = None
 
@@ -239,9 +240,14 @@ def draw_table(
             cellColours=[cellc]*len(rows),
             cellText=[['']+r+[''] for r in rows.values()],
             rowLabels=rowlbl)
-    tbl.set_fontsize('xx-large')
+
+    tbl.auto_set_font_size(False)
+    tbl.set_fontsize('medium')
+
     for cell in tbl.properties()['child_artists']:
         dflt_h = cell.get_height()
+        #print(dflt_h)
+        cell.set_height(dflt_h*height_scaling)
     return ax
 
 
@@ -330,10 +336,11 @@ def plot (
     if not tabulate:
         ax0 = fig.add_subplot(1,1,1)
     else:
-        gs = gridspec.GridSpec(2,1, height_ratios=(100,10*len(tabulate)))
+        gs = gridspec.GridSpec(2,1, height_ratios=(100,15*len(tabulate)))
+        #gs = gridspec.GridSpec(2,1)
         ax1 = fig.add_subplot(gs[1])
         ax0 = fig.add_subplot(gs[0])
-        fig.subplots_adjust(hspace=0)
+        fig.subplots_adjust(hspace=0.05)
 
     ax, xticks, xticklabels, rows = draw(ax0, families, configs, metrics, widths, tabulate, gtype, baseline, y_as_percent)
 
@@ -344,7 +351,7 @@ def plot (
         a.set_xticklabels([])
 
     if rows:
-        ax = draw_table(ax1,rows,benchs,configs,metrics,widths,archs_in_rowlabel, sdks_in_rowlabel,bitfiles_in_rowlabel, tstructs_in_rowlabel)
+        ax = draw_table(ax1,rows,benchs,configs,metrics,widths,1.4*len(tabulate),archs_in_rowlabel, y_as_percent, sdks_in_rowlabel,bitfiles_in_rowlabel, tstructs_in_rowlabel)
         ax.yaxis.set_visible(False)
         for s in ax.spines.values():
             s.set_visible(False)
