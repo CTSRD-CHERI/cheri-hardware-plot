@@ -124,8 +124,7 @@ if __name__ == "__main__":
     try:
         import argcomplete
         argcomplete.autocomplete(parser)
-    except Exception as e:
-        argcomplete.warn("ASDF", e)
+    except ImportError as e:
         pass
     from drawplot import run_main
     run_main.main(parser.parse_args())
