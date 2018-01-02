@@ -41,7 +41,7 @@ def conf_str (a,b,c,d):
 
 # Jenkins username and password
 user="readonly"
-password="aiB8ax4iewithoh2"
+password="changeme"
 jenkins="https://ctsrd-build.cl.cam.ac.uk"
 
 curl = sub.run(["which","curl"],stdout=sub.PIPE).stdout.decode("utf-8").strip()
