@@ -1,4 +1,5 @@
 #! /usr/bin/env python3
+# PYTHON_ARGCOMPLETE_OK
 # -
 # Copyright (c) 2017 Alexandre Joannou
 # Copyright (c) 2018 Alex Richardson
@@ -29,9 +30,11 @@
 # OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
 # SUCH DAMAGE.
 #
-
+import argparse
+import json
 import subprocess as sub
 import pandas as pd
+import sys
 from collections import namedtuple
 
 
@@ -51,10 +54,23 @@ def conf_str(a, b, c, d):
     return "{}-{}-{}-{}".format(a, b, c, d)
 
 
+parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+parser.add_argument("--latest-only", action="store_true",
+                    help="Only fetch the csv for the last successful run")
+parser.add_argument("--subset", help="Subset of job csvs to fetch", default="19aug2017",
+                    choices=["19aug2017", "cheriabi", "cap-table", "latest"])
+try:
+    import argcomplete
+    argcomplete.autocomplete(parser)
+except ImportError as e:
+    pass
+args = parser.parse_args()
+
 # Jenkins username and password
 user = "readonly"
 password = "changeme"
 jenkins = "https://ctsrd-build.cl.cam.ac.uk"
+LAST_SUCCESSFUL_JOB_NUM = sys.maxsize
 
 curl = sub.run(["which", "curl"], stdout=sub.PIPE).stdout.decode("utf-8").strip()
 base_cmd = [curl, "--fail", "-O", "-k", "-u", "{}:{}".format(user, password)]
@@ -65,39 +81,57 @@ base_cmd = [curl, "--fail", "-O", "-k", "-u", "{}:{}".format(user, password)]
 # duktape_jobs = [145,153,161,162,167,168,169,173,174,176,177,185,192,193]
 # olden_jobs   = [297,298]
 # mibench_jobs = [244,245]
-# starting 10th august / cheriabi deadline
-# duktape_jobs = [200,201,202,203,204,205,206,210,211,212]
-# olden_jobs   = [321,325] # don't use 324
-# mibench_jobs = [251,252,253,254,257]
+if args.subset == "cheriabi":
+    # starting 10th august / cheriabi deadline
+    duktape_jobs = [200,201,202,203,204,205,206,210,211,212]
+    olden_jobs   = [321,325] # don't use 324
+    mibench_jobs = [251,252,253,254,257]
 # starting 19th august
-# duktape_jobs = [232,233,234,240,241,243,246,249,250,251,252,254,255,256,266,267]
-# olden_jobs   = [342,343,350,352,353,354,355,360]
-# mibench_jobs = [268,275,278,279,280,281,285,286]
-duktape_jobs = [267]
-olden_jobs = [360]
-mibench_jobs = [286]
-
+elif args.subset == "19aug2017":
+    duktape_jobs = [232,233,234,240,241,243,246,249,250,251,252,254,255,256,266,267]
+    olden_jobs   = [342,343,350,352,353,354,355,360]
+    mibench_jobs = [268,275,278,279,280,281,285,286]
 # including cap-table
-duktape_jobs += []
-olden_jobs += [550, 560]
-mibench_jobs += [496, 503]
+elif args.subset == "cap-table":
+    duktape_jobs = []
+    olden_jobs = [550, 560]
+    mibench_jobs = [496, 503]
+
+# Allow fetching only the latest job
+if args.subset == "latest" or args.latest_only:
+    # only latest:
+    duktape_jobs = [LAST_SUCCESSFUL_JOB_NUM]
+    olden_jobs = [LAST_SUCCESSFUL_JOB_NUM]
+    mibench_jobs = [LAST_SUCCESSFUL_JOB_NUM]
+
 
 # XXXAR: no idea what the actual job number is where this was changed, let's just use something
-def no_more_tstruct_0(job, job_num):
+def includes_tstruct_0(job, job_num):
     # TODO: find the right numbers
-    return job_num > 400
+    return job_num < 400
 
 
-def no_more_mips_sdk(job, job_num):
+def includes_mips_sdk(job, job_num):
     # TODO: find the right numbers
-    return job_num > 400
+    return job_num < 400
+
+
+def includes_mips_on_256_bitfile(job, job_num):
+    # most runs use the cheri128 bitfile
+    # TODO: do we need this?
+    return job_num < 400
+
+
+def includes_beri_bitfile(job, job_num):
+    # most runs use the cheri128 bitfile for running MIPS (for memcpy performance)
+    return job_num < 400
 
 
 def includes_isa_column(job, job_num):
     if job == "bluehive-benchmark-olden":
-        return job_num == -1 or job_num > 550
+        return job_num > 550
     if job == "bluehive-benchmark-mibench":
-        return job_num == -1 or job_num > 493
+        return job_num > 493
     elif job == "bluehive-benchmark-octane-duktape":
         return False
     assert False, "Bad job " + job
@@ -134,18 +168,23 @@ tstructs = ["0", "0_256"]
 #        print(" ".join(run_cmd))
 #        sub.run(run_cmd)
 
+
 def is_valid_job_config(bitfile, isa, sdk, target_arch, tstruct, job_name, job_num):
-    if tstruct == "0_256" and bitfile == "beri":
-        return False
+    # we run mips on cheri128 starting after some job
+    if bitfile == "beri":
+        if not includes_beri_bitfile(job_name, job_num):
+            return False
+        if tstruct == "0_256":
+            return False
     # no more tstruct 0 for CHERI builds after some job#
-    if bitfile != "beri" and no_more_tstruct_0(job_name, job_num):
+    elif tstruct == "0" and not includes_tstruct_0(job_name, job_num):
         return False
     # no more MIPS sdk builds after some build:
-    if sdk == "mips" and no_more_mips_sdk(job_name, job_num):
+    if sdk == "mips" and not includes_mips_sdk(job_name, job_num):
         return False
     # cap-table is only valid for some builds:
     if isa == "cap-table":
-        if not includes_isa_column(job, job_num):
+        if not includes_isa_column(job_name, job_num):
             return False
         if tstruct != "0_256" or bitfile != sdk or sdk != target_arch or bitfile == "beri":
             return False
@@ -156,9 +195,12 @@ def is_valid_job_config(bitfile, isa, sdk, target_arch, tstruct, job_name, job_n
     if bitfile == "cheri128" and sdk != "cheri256" and target_arch != "cheri256" and not (
             sdk == "mips" and target_arch == "cheri128"):
         return True
-    if bitfile == "cheri256" and sdk != "cheri128" and target_arch != "cheri128" and not (
-            sdk == "mips" and target_arch == "cheri256"):
-        return True
+    if bitfile == "cheri256":
+        if target_arch == "mips" and not includes_mips_on_256_bitfile(job_name, job_num):
+            return False
+        if sdk != "cheri128" and target_arch != "cheri128" and not (
+                sdk == "mips" and target_arch == "cheri256"):
+            return True
     return False
 
 
@@ -179,14 +221,25 @@ dfs = []
 for bitfile_cpu, isa, sdk_cpu, tgt_arch_cpu, tstruct, job, jobnum in confs:
     if not includes_isa_column(job, jobnum):
         isa = None
-    filename = artifact_str(job, bitfile_cpu, isa, sdk_cpu, tgt_arch_cpu, tstruct, jobnum)
     url = jenkins
     url += "/job/" + job
-    url += "/" + jobargs_str(bitfile_cpu, isa, sdk_cpu, tgt_arch_cpu, tstruct)
-    url += "/{}/artifact/".format(jobnum if jobnum != -1 else "lastSuccessfulBuild") + filename
+    if jobnum == LAST_SUCCESSFUL_JOB_NUM:
+        # find out the real numerical id:
+        api_cmd = base_cmd.copy()
+        api_cmd.remove("-O")
+        api_cmd.append(url + "/lastSuccessfulBuild/api/json")
+        print(" ".join(api_cmd))
+        output = sub.check_output(api_cmd)
+        data = json.loads(output)
+        # import pprint
+        # pprint.pprint(data)
+        jobnum = int(data["id"])
+    filename = artifact_str(job, bitfile_cpu, isa, sdk_cpu, tgt_arch_cpu, tstruct, jobnum)
+    url += "/{}/{}/artifact/".format(jobnum, jobargs_str(bitfile_cpu, isa, sdk_cpu, tgt_arch_cpu, tstruct))
+    url += filename
     run_cmd = base_cmd + [url]
     print(" ".join(run_cmd))
-    sub.run(run_cmd)
+    sub.check_call(run_cmd)
     data = pd.read_csv(filename)
     data.insert(0, 'table-struct', tstruct)
     if isa == "cap-table":
