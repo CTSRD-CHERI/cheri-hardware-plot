@@ -30,12 +30,22 @@
 # OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
 # SUCH DAMAGE.
 #
+from enum import Enum
 import argparse
 import json
 import subprocess as sub
+import os
 import pandas as pd
+import shutil
 import sys
+from pathlib import Path
 from collections import namedtuple
+
+
+class Jobs(Enum):
+    Olden = "bluehive-benchmark-olden"
+    Mibench = "bluehive-benchmark-mibench"
+    Duktape = "bluehive-benchmark-octane-duktape"
 
 
 def jobargs_str(bitfile, isa, sdk, tgt_arch, tstruct):
@@ -59,8 +69,9 @@ parser.add_argument("--latest-only", action="store_true",
                     help="Only fetch the csv for the last successful run")
 parser.add_argument("--subset", help="Subset of job csvs to fetch", default="19aug2017",
                     choices=["19aug2017", "cheriabi", "cap-table", "latest"])
+jobs_lowercase = [job.name.lower() for job in Jobs]
 parser.add_argument("--jobs", nargs=argparse.ONE_OR_MORE, help="Subset of job csvs to fetch",
-                    choices=["olden", "mibench", "duktape"], default=["olden", "mibench", "duktape"])
+                    choices=jobs_lowercase, default=jobs_lowercase)
 try:
     import argcomplete
     argcomplete.autocomplete(parser)
@@ -77,10 +88,25 @@ try:
 except:
     sys.exit("Could not read jenkins readonly user password from " + str(pw_file))
 jenkins = "https://ctsrd-build.cl.cam.ac.uk"
-LAST_SUCCESSFUL_JOB_NUM = sys.maxsize
 
 curl = shutil.which("curl")
-base_cmd = [curl, "--fail", "-O", "-k", "-u", "{}:{}".format(user, password)]
+base_cmd = [curl, "--fail", "-sS", "-O", "-k", "-u", "{}:{}".format(user, password)]
+
+
+def get_last_successful_run(job: Jobs) -> int:
+    # find out the real numerical id:
+    api_cmd = base_cmd.copy()
+    api_cmd.remove("-O")
+    api_cmd.append(jenkins + "/job/" + job.value + "/lastSuccessfulBuild/api/json")
+    print(" ".join(api_cmd))
+    output = sub.check_output(api_cmd)
+    data = json.loads(output)
+    # import pprint
+    # pprint.pprint(data)
+    jobnum = int(data["id"])
+    print("Last successful", job.name, "run was", jobnum)
+    return jobnum
+
 
 # duktape_jobs = [113,114,115,116,117,118,119,120,125,126,127,128,129,130]
 # olden_jobs   = [271,272,273] # don't use 274
@@ -88,6 +114,10 @@ base_cmd = [curl, "--fail", "-O", "-k", "-u", "{}:{}".format(user, password)]
 # duktape_jobs = [145,153,161,162,167,168,169,173,174,176,177,185,192,193]
 # olden_jobs   = [297,298]
 # mibench_jobs = [244,245]
+duktape_jobs = []
+olden_jobs = []
+mibench_jobs = []
+
 if args.subset == "cheriabi":
     # starting 10th august / cheriabi deadline
     duktape_jobs = [200,201,202,203,204,205,206,210,211,212]
@@ -106,11 +136,12 @@ elif args.subset == "cap-table":
 
 # Allow fetching only the latest job
 if args.subset == "latest" or args.latest_only:
-    # only latest:
-    duktape_jobs = [LAST_SUCCESSFUL_JOB_NUM]
-    olden_jobs = [LAST_SUCCESSFUL_JOB_NUM]
-    mibench_jobs = [LAST_SUCCESSFUL_JOB_NUM]
-
+    if Jobs.Duktape.name.lower() in args.jobs:
+        duktape_jobs = [get_last_successful_run(Jobs.Duktape)]
+    if Jobs.Olden.name.lower() in args.jobs:
+        olden_jobs = [get_last_successful_run(Jobs.Olden)]
+    if Jobs.Mibench.name.lower() in args.jobs:
+        mibench_jobs = [get_last_successful_run(Jobs.Mibench)]
 
 # XXXAR: no idea what the actual job number is where this was changed, let's just use something
 def includes_tstruct_0(job, job_num):
@@ -135,22 +166,32 @@ def includes_beri_bitfile(job, job_num):
 
 
 def includes_isa_column(job, job_num):
-    if job == "bluehive-benchmark-olden":
+    if job == Jobs.Olden.value:
         return job_num > 550
-    if job == "bluehive-benchmark-mibench":
+    if job == Jobs.Mibench.value:
         return job_num > 493
-    elif job == "bluehive-benchmark-octane-duktape":
+    elif job == Jobs.Duktape.value:
+        return False
+    assert False, "Bad job " + job
+
+
+def includes_nobounds_isa(job, job_num):
+    if job == Jobs.Olden.value:
+        return job_num >= 569
+    if job == Jobs.Mibench.value:
+        return job_num > 511
+    elif job == Jobs.Duktape.value:
         return False
     assert False, "Bad job " + job
 
 
 jobs = []
-if "duktape" in args.jobs:
-    jobs += [("bluehive-benchmark-octane-duktape", duktape_jobs)]
-if "olden" in args.jobs:
-    jobs += [("bluehive-benchmark-olden", olden_jobs)]
-if "mibench" in args.jobs:
-    jobs += [("bluehive-benchmark-mibench", mibench_jobs)]
+if Jobs.Duktape.name.lower() in args.jobs:
+    jobs += [(Jobs.Duktape.value, duktape_jobs)]
+if Jobs.Olden.name.lower() in args.jobs:
+    jobs += [(Jobs.Olden.value, olden_jobs)]
+if Jobs.Mibench.name.lower() in args.jobs:
+    jobs += [(Jobs.Mibench.value, mibench_jobs)]
 
 bitfile_cpus = ["beri", "cheri128", "cheri256"]
 tgt_arch_cpus = ["mips", "cheri128", "cheri256"]
@@ -194,8 +235,10 @@ def is_valid_job_config(bitfile, isa, sdk, target_arch, tstruct, job_name, job_n
     if sdk == "mips" and not includes_mips_sdk(job_name, job_num):
         return False
     # cap-table is only valid for some builds:
-    if isa == "cap-table":
+    if isa in ("cap-table", "nobounds"):
         if not includes_isa_column(job_name, job_num):
+            return False
+        if isa == "nobounds" and not includes_nobounds_isa(job_name, job_num):
             return False
         if tstruct != "0_256" or bitfile != sdk or sdk != target_arch or bitfile == "beri":
             return False
@@ -217,7 +260,7 @@ def is_valid_job_config(bitfile, isa, sdk, target_arch, tstruct, job_name, job_n
 
 Config = namedtuple("Config", ("bitfile_cpu", "isa", "sdk_cpu", "target_arch_cpu", "tstruct", "job", "job_num"))
 confs = [Config(bitfile, isa, sdk, target_arch, tstruct, job_name, job_num) for bitfile in bitfile_cpus
-         for isa in ("vanilla", "cap-table")
+         for isa in ("vanilla", "cap-table", "nobounds")
          for sdk in sdk_cpus
          for target_arch in tgt_arch_cpus
          for tstruct in tstructs
@@ -234,17 +277,6 @@ for bitfile_cpu, isa, sdk_cpu, tgt_arch_cpu, tstruct, job, jobnum in confs:
         isa = None
     url = jenkins
     url += "/job/" + job
-    if jobnum == LAST_SUCCESSFUL_JOB_NUM:
-        # find out the real numerical id:
-        api_cmd = base_cmd.copy()
-        api_cmd.remove("-O")
-        api_cmd.append(url + "/lastSuccessfulBuild/api/json")
-        print(" ".join(api_cmd))
-        output = sub.check_output(api_cmd)
-        data = json.loads(output)
-        # import pprint
-        # pprint.pprint(data)
-        jobnum = int(data["id"])
     filename = artifact_str(job, bitfile_cpu, isa, sdk_cpu, tgt_arch_cpu, tstruct, jobnum)
     url += "/{}/{}/artifact/".format(jobnum, jobargs_str(bitfile_cpu, isa, sdk_cpu, tgt_arch_cpu, tstruct))
     url += filename
@@ -253,8 +285,8 @@ for bitfile_cpu, isa, sdk_cpu, tgt_arch_cpu, tstruct, job, jobnum in confs:
     sub.check_call(run_cmd)
     data = pd.read_csv(filename)
     data.insert(0, 'table-struct', tstruct)
-    if isa == "cap-table":
-        tgt_arch_cpu += "-cap-table"
+    if isa is not None and isa != "vanilla":
+        tgt_arch_cpu += "-" + isa
     data.insert(0, 'target-arch-cpu', tgt_arch_cpu)
     data.insert(0, 'sdk-cpu', sdk_cpu)
     data.insert(0, 'bitfile-cpu', bitfile_cpu)
