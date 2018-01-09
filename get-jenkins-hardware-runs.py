@@ -59,6 +59,8 @@ parser.add_argument("--latest-only", action="store_true",
                     help="Only fetch the csv for the last successful run")
 parser.add_argument("--subset", help="Subset of job csvs to fetch", default="19aug2017",
                     choices=["19aug2017", "cheriabi", "cap-table", "latest"])
+parser.add_argument("--jobs", nargs=argparse.ONE_OR_MORE, help="Subset of job csvs to fetch",
+                    choices=["olden", "mibench", "duktape"], default=["olden", "mibench", "duktape"])
 try:
     import argcomplete
     argcomplete.autocomplete(parser)
@@ -137,9 +139,13 @@ def includes_isa_column(job, job_num):
     assert False, "Bad job " + job
 
 
-jobs = [("bluehive-benchmark-octane-duktape", duktape_jobs)]
-jobs += [("bluehive-benchmark-olden", olden_jobs)]
-jobs += [("bluehive-benchmark-mibench", mibench_jobs)]
+jobs = []
+if "duktape" in args.jobs:
+    jobs += [("bluehive-benchmark-octane-duktape", duktape_jobs)]
+if "olden" in args.jobs:
+    jobs += [("bluehive-benchmark-olden", olden_jobs)]
+if "mibench" in args.jobs:
+    jobs += [("bluehive-benchmark-mibench", mibench_jobs)]
 
 bitfile_cpus = ["beri", "cheri128", "cheri256"]
 tgt_arch_cpus = ["mips", "cheri128", "cheri256"]
