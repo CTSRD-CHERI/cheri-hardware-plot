@@ -68,8 +68,8 @@ metrics = ['cycles', 'instructions', 'itlb_miss', 'dtlb_miss', 'tlb_inst_share',
 'icache_misses', 'icache_hits', 'icache_accesses', 'icache_read_miss_rate', 'icache_read_hit_rate',
 'dcache_misses', 'dcache_hits', 'dcache_accesses', 'dcache_read_miss_rate', 'dcache_read_hit_rate',
 'l2cache_misses', 'l2cache_hits', 'l2cache_accesses', 'l2cache_read_miss_rate', 'l2cache_read_hit_rate', 'l2cache_req_flits', 'l2cache_rsp_flits', 'l2cache_flits',
-'mem_bytes_read', 'mem_bytes_write', 'mem_bytes', 'tagcache_req_flits', 'tagcache_rsp_flits', 'tagcache_flits', 'dram_req_flits', 'dram_rsp_flits', 'dram_flits',
-'tags_req_flits', 'tags_rsp_flits', 'tags_flits', 'tags_dram_overhead', 'dram_inst_share']
+'mem_bytes_read', 'mem_bytes_write', 'mem_bytes', 'tagcache_req_flits', 'tagcache_rsp_flits', 'tagcache_flits', 'dram_req_flits', 'dram_rsp_flits', 'dram_flits', 'dram_mpki',
+'tags_req_flits', 'tags_rsp_flits', 'tags_flits', 'tags_dram_overhead', 'tags_dram_mpki', 'dram_inst_share']
 bars.add_argument('--metrics', default=['cycles'], type=str, nargs='+', choices=metrics, metavar='METRIC',
         help="Metric(s) to compare benchmarks against. One or more of {}.".format(', '.join(metrics)))
 bars.add_argument('--label', default=None, type=str, metavar='LABEL',

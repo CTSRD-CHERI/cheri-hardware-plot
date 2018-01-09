@@ -1,6 +1,6 @@
 #! /usr/bin/env python3
 #-
-# Copyright (c) 2017 Alexandre Joannou
+# Copyright (c) 2017-2018 Alexandre Joannou
 # All rights reserved.
 #
 # This software was developed by SRI International and the University of
@@ -204,8 +204,7 @@ def draw (
 
 def draw_table(
         ax, rows, benchs, confs, metrics, widths, height_scaling,
-        y_as_percent,
-        archs_in_rowlabel, sdks_in_rowlabel, bitfiles_in_rowlabel, tstructs_in_rowlabel):
+        archs_in_rowlabel, y_as_percent, sdks_in_rowlabel, bitfiles_in_rowlabel, tstructs_in_rowlabel):
     colw = [widths.buffers - widths.bench_spaces/2.0]
     cellc = ['lightgrey']
     nconfs = len(confs)
@@ -353,7 +352,7 @@ def plot (
         a.set_xticklabels([])
 
     if rows:
-        ax = draw_table(ax1,rows,benchs,configs,metrics,widths,1.4*len(tabulate),archs_in_rowlabel, y_as_percent, sdks_in_rowlabel,bitfiles_in_rowlabel, tstructs_in_rowlabel)
+        ax = draw_table(ax1,rows,benchs,configs,metrics,widths,2.5,archs_in_rowlabel, y_as_percent, sdks_in_rowlabel,bitfiles_in_rowlabel, tstructs_in_rowlabel)
         ax.yaxis.set_visible(False)
         for s in ax.spines.values():
             s.set_visible(False)

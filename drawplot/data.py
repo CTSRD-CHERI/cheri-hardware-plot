@@ -145,6 +145,8 @@ def import_data (csv_files):
     df = df.assign(tags_flits = lambda x: x.tags_req_flits + x.tags_rsp_flits)
 
     df = df.assign(tags_dram_overhead = lambda x: x.tags_flits / x.dram_flits)
+    df = df.assign(dram_mpki = lambda x: x.dram_req_flits / (x.instructions/1000))
+    df = df.assign(tags_dram_mpki = lambda x: x.tags_req_flits / (x.instructions/1000))
     df = df.assign(dram_inst_share = lambda x: x.dram_flits / x.instructions)
 
     return index_cat_data(df)
