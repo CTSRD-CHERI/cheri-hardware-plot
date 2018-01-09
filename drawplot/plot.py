@@ -30,6 +30,7 @@
 #
 
 import numpy as np
+import pandas as pd
 import matplotlib.patches as mpatches
 from enum import Enum
 from drawplot.data import index_cat_data, std_norm, overheads2median
@@ -37,6 +38,7 @@ from drawplot.plot_params import element_spaces_conf, element_color, element_hat
 
 from collections import defaultdict
 from matplotlib import gridspec
+from matplotlib.figure import Figure
 
 # type of graph enum
 GraphType = Enum('GraphType', ['bar','box'])
@@ -255,7 +257,7 @@ def draw_table(
 ###############################################################################
 # exported plotting function
 def plot (
-        fig, df, gtype, baseline=None, configs=None, benchs=None,
+        fig: Figure, df: pd.DataFrame, gtype: GraphType, baseline=None, configs=None, benchs=None,
         metrics=['cycles'], tabulate=None, lbl=None, metrics_in_legend=False,
         archs_in_legend=False, sdks_in_legend=False, bitfiles_in_legend=False,
         tstructs_in_legend=False, legend_columns=None,
