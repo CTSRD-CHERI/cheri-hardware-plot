@@ -79,7 +79,7 @@ except:
 jenkins = "https://ctsrd-build.cl.cam.ac.uk"
 LAST_SUCCESSFUL_JOB_NUM = sys.maxsize
 
-curl = sub.run(["which", "curl"], stdout=sub.PIPE).stdout.decode("utf-8").strip()
+curl = shutil.which("curl")
 base_cmd = [curl, "--fail", "-O", "-k", "-u", "{}:{}".format(user, password)]
 
 # duktape_jobs = [113,114,115,116,117,118,119,120,125,126,127,128,129,130]
