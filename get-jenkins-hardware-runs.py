@@ -70,7 +70,12 @@ args = parser.parse_args()
 
 # Jenkins username and password
 user = "readonly"
-password = "changeme"
+password = "invalid"
+pw_file = Path.home() / ".config" / "ctsrd-jenkins-readonly-user.txt"
+try:
+    password = pw_file.read_text().strip()  # remove newline
+except:
+    sys.exit("Could not read jenkins readonly user password from " + str(pw_file))
 jenkins = "https://ctsrd-build.cl.cam.ac.uk"
 LAST_SUCCESSFUL_JOB_NUM = sys.maxsize
 
