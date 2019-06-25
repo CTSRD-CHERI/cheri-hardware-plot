@@ -54,7 +54,9 @@ common.add_argument('--output', type=str, default=None, metavar=('OUTFILE'),
 bars = argparse.ArgumentParser(add_help=False)
 bars.add_argument('--benchs', default=None, type=str, nargs='+', action='append', metavar='BENCH',
         help="A sequence of BENCH(s) to use for the plot. When called several times, it separates the BENCH(s) in different groups.")
-bars.add_argument('--config', default=None, type=str, nargs=4, action='append', choices=['beri','mips','cheri128','cheri256','0','0_256'], metavar=('BITFILE_CPU','SDK_CPU','TGT_ARCH_CPU','TSTRUCT'),
+bars.add_argument('--config', default=None, type=str, nargs=4, action='append',
+                  # there are now more options: choices=['beri','mips','cheri128','cheri256','0','0_256'],
+                  metavar=('BITFILE_CPU','SDK_CPU','TGT_ARCH_CPU','TSTRUCT'),
         help="Adds the ('BITFILE_CPU','SDK_CPU','TGT_ARCH_CPU','TSTRUCT') configuration to the plot.")
 metrics = ['cycles', 'instructions', 'itlb_miss', 'dtlb_miss', 'tlb_inst_share',
 'icache_write_hit', 'icache_write_miss', 'icache_read_hit', 'icache_read_miss', 'icache_evict',
@@ -109,13 +111,17 @@ bars.add_argument('--tstructs-in-rowlabel', action='store_true',
 # specific commands
 cmd_bar_plot_o = subcmds.add_parser('bar-plot-overheads', parents=[common, bars],
         help="Generate a bar plot of overheads.")
-cmd_bar_plot_o.add_argument('--baseline', type=str, nargs=4, default=['cheri256','cheri256','mips','0'], choices=['beri','mips','cheri128','cheri256','0','0_256'], metavar=('BITFILE_CPU','SDK_CPU','TGT_ARCH_CPU','TSTRUCT'),
+cmd_bar_plot_o.add_argument('--baseline', type=str, nargs=4, default=['cheri256','cheri256','mips','0'],
+                            # there are now more options: choices=['beri','mips','cheri128','cheri256','0','0_256'],
+                            metavar=('BITFILE_CPU','SDK_CPU','TGT_ARCH_CPU','TSTRUCT'),
         help="The configuration to use as baseline: BITFILE_CPU SDK_CPU TGT_ARCH_CPU TSTRUCT (default is cheri256 cheri256 mips 0).")
 cmd_bar_plot = subcmds.add_parser('bar-plot', parents=[common, bars],
         help="Generate a bar plot of raw data.")
 cmd_box_plot_o = subcmds.add_parser('box-plot-overheads', parents=[common, bars],
         help="Generate a box plot of overheads")
-cmd_box_plot_o.add_argument('--baseline', type=str, nargs=4, default=['cheri256','cheri256','mips','0'], choices=['beri','mips','cheri128','cheri256','0','0_256'], metavar=('BITFILE_CPU','SDK_CPU','TGT_ARCH_CPU','TSTRUCT'),
+cmd_box_plot_o.add_argument('--baseline', type=str, nargs=4, default=['cheri256','cheri256','mips','0'],
+                            # there are now more options: choices=['beri','mips','cheri128','cheri256','0','0_256'],
+                            metavar=('BITFILE_CPU','SDK_CPU','TGT_ARCH_CPU','TSTRUCT'),
         help="The configuration to use as baseline: BITFILE_CPU SDK_CPU TGT_ARCH_CPU TSTRUCT (default is cheri256 cheri256 mips 0).")
 
 
