@@ -38,7 +38,7 @@ import numpy as np
 # import data #
 ###############
 
-def index_cat_data (df,
+def index_cat_data (df: pd.DataFrame,
         benchs=[
                 'automotive-basicmath',
                 'automotive-bitcount',
@@ -65,6 +65,8 @@ def index_cat_data (df,
                 "pgbench",
                 "scp"
             ]):
+    df.set_index(['bitfile-cpu', 'sdk-cpu', 'target-arch-cpu', 'table-struct', 'progname'], inplace=True)
+    return df
     """
     Takes a Pandas DataFrame of CHERI statcounters and index it with appropriate
     categorical data for bitfile-cpu, sdk-cpu, target-arch-cpu and progname.
