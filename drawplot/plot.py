@@ -156,7 +156,10 @@ def draw (
                     pos += widths.element_spaces
             ###################################################################
             xticks.append(pos - ((pos-pos_start)/2))
-            xticklabels.append(bench_name(bench))
+
+            # Need to escape underscores for latex output!
+            # FIXME: why doesn't matplotlib escape this??
+            xticklabels.append(bench_name(bench).replace("_", "\_"))
             # skip space between benchmarks
             if j < family.index.get_level_values('progname').unique().size - 1:
                 pos += widths.bench_spaces
