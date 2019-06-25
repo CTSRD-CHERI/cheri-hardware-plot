@@ -291,6 +291,12 @@ for bitfile_cpu, isa, sdk_cpu, tgt_arch_cpu, tstruct, job, jobnum in confs:
     run_cmd = base_cmd + [url]
     print(" ".join(run_cmd))
     sub.check_call(run_cmd)
+    if Path(filename).stat().st_size == 0:
+        print("WARNING: Could not find a csv file for configuration",
+              "bitfile_cpu={}, isa={}, sdk_cpu={}, tgt_arch_cpu={}, tstruct={}, job={}, jobnum={}".format(
+                  bitfile_cpu, isa, sdk_cpu, tgt_arch_cpu, tstruct, job, jobnum), file=sys.stderr)
+        Path(filename).unlink()
+        continue
     data = pd.read_csv(filename)
     data.insert(0, 'table-struct', tstruct)
     if isa is not None and isa != "vanilla":
