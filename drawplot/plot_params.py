@@ -37,7 +37,7 @@ def metric_name (m):
         "instructions": " cpu instructions",
         "l2cache_misses": "l2cache misses",
         "l2cache_flits": "l2cache flits"
-    }.get(m,m)
+    }.get(m, m)
 
 def bench_name (n):
     return {

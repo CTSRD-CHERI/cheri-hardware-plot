@@ -34,7 +34,7 @@ import pandas as pd
 import matplotlib.patches as mpatches
 from enum import Enum
 from drawplot.data import index_cat_data, std_norm, overheads2median
-from drawplot.plot_params import element_spaces_conf, element_color, element_hatch, bench_name, arch_name, tstruct_name
+from drawplot.plot_params import element_spaces_conf, element_color, element_hatch, bench_name, arch_name, tstruct_name, metric_name
 
 from collections import defaultdict
 from matplotlib import gridspec
