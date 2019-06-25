@@ -234,6 +234,13 @@ def is_valid_job_config(bitfile, isa, sdk, target_arch, tstruct, job_name, job_n
     # no more MIPS sdk builds after some build:
     if sdk == "mips" and not includes_mips_sdk(job_name, job_num):
         return False
+
+    if job_name == Jobs.Olden.value and job_num >= 900:
+        # No more vanilla, nobounds
+        # only includes legacy legacy-nobounds cap-table-pcrel
+        if isa not in ("legacy", "legacy-nobounds", "cap-table-pcrel"):
+            return False
+
     # cap-table is only valid for some builds:
     if isa in ("cap-table", "nobounds"):
         if not includes_isa_column(job_name, job_num):
@@ -258,9 +265,10 @@ def is_valid_job_config(bitfile, isa, sdk, target_arch, tstruct, job_name, job_n
     return False
 
 
+# This is insanely inefficient if we ever end up with more than a few job configs:
 Config = namedtuple("Config", ("bitfile_cpu", "isa", "sdk_cpu", "target_arch_cpu", "tstruct", "job", "job_num"))
 confs = [Config(bitfile, isa, sdk, target_arch, tstruct, job_name, job_num) for bitfile in bitfile_cpus
-         for isa in ("vanilla", "cap-table", "nobounds")
+         for isa in ("legacy", "legacy-nobounds", "vanilla", "cap-table", "cap-table-pcrel", "nobounds")
          for sdk in sdk_cpus
          for target_arch in tgt_arch_cpus
          for tstruct in tstructs
