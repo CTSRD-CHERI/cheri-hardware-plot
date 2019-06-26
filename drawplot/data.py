@@ -157,7 +157,8 @@ def no_outliers(samples,acceptable_zscore=1.75):
     zscore = np.abs((samples-samples.mean())/samples.std())
     return samples[zscore < acceptable_zscore]
 
-def std_norm(base_samples,test_samples):
+def std_norm_old(base_samples,test_samples):
+    # The old inverse square logic
     Ea = np.mean(base_samples)
     Eb = np.mean(test_samples)
     cov_mat = np.cov(np.array([base_samples,test_samples]),ddof=1)
@@ -167,6 +168,24 @@ def std_norm(base_samples,test_samples):
     E = Eb/Ea - coV/(Ea**2) + Eb*Va/(Ea**3)
     V = Vb/(Ea**2) - 2*Eb*coV/(Ea**3) + (Eb**2)*Va/(Ea**4)
     return (E,np.sqrt(V))
+
+# We want to use IQRs for benchmarks
+def std_norm(base_samples, test_samples):
+    if len(base_samples) == 0 or len(test_samples) == 0:
+        print("base:", base_samples)
+        print("test:", test_samples, flush=True)
+        raise RuntimeError("EMPTY SAMPLES INPUT?")
+    test_norm = test_samples / np.median(base_samples)
+    # It seems like we get ZERO l2cache missing in the bzip benchmark:
+    if any(np.isnan(x) for x in test_norm):
+        print("base:", base_samples)
+        print("test:", test_samples, flush=True)
+        print("base median: ", np.median(base_samples))
+        print("test_norm =", test_norm, flush=True)
+        # raise RuntimeError("GOT NAN IN TEST_NORM: ", test_norm)
+    # per https://stackoverflow.com/questions/23228244/how-do-you-find-the-iqr-in-numpy
+    iqr = np.subtract(*np.percentile(test_norm, [75, 25]))
+    return (np.median(test_norm), iqr)
 
 def overheads2median(samples, baseline_median):
     return list(map(lambda x: (x/baseline_median)-1.0, samples))
