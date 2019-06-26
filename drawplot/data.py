@@ -184,8 +184,11 @@ def std_norm(base_samples, test_samples):
         print("test_norm =", test_norm, flush=True)
         # raise RuntimeError("GOT NAN IN TEST_NORM: ", test_norm)
     # per https://stackoverflow.com/questions/23228244/how-do-you-find-the-iqr-in-numpy
-    iqr = np.subtract(*np.percentile(test_norm, [75, 25]))
-    return (np.median(test_norm), iqr)
+    # iqr = np.subtract(*np.percentile(test_norm, [75, 25]))
+    q75 = np.percentile(test_norm, 75)
+    q25 = np.percentile(test_norm, 25)
+    med = np.median(test_norm)
+    return np.median(test_norm), med - q25, q75 - med
 
 def overheads2median(samples, baseline_median):
     return list(map(lambda x: (x/baseline_median)-1.0, samples))

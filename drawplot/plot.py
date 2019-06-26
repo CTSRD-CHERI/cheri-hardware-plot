@@ -107,16 +107,34 @@ def draw (
                 # Bar plot #
                 ###############################################################
                 if gtype == GraphType.bar:
-                    y = conf_data[metric].mean()
-                    err = conf_data[metric].std()
                     if baseline:
-                        y,err = std_norm(
-                                baseline_data[metric],
-                                conf_data[metric])
-                    max_y = y + err if max_y == None else max (y + err,max_y)
-                    min_y = y + err if min_y == None else min (y - err,min_y)
+                        y, err_low, err_high = std_norm(baseline_data[metric], conf_data[metric])
+                    else:
+                        # IQR or stddev?
+                        if False:
+                            y = conf_data[metric].mean()
+                            err = conf_data[metric].std()
+                            err_low = err - y
+                            err_high = err - y
+                        else:
+                            y = conf_data[metric].median()
+                            q75 = np.percentile(conf_data[metric], 75)
+                            q25 = np.percentile(conf_data[metric], 25)
+                            assert q25 <= y
+                            assert q75 >= y
+                            err_low = y - q25
+                            err_high = q75 - y
+                    # matplotlib expects low and high errors to be positive values! I.e. err_low is subtracted from the
+                    # the value and err_high is added!
+                    assert err_low >= 0, err_low
+                    assert err_high >= 0, err_high
+                    # print(y, err_low, err_high)
+                    max_y = y + err_high if max_y is None else max(y + err_high, max_y)
+                    min_y = y - err_low if min_y is None else min(y - err_low, min_y)
+                    print(metric, "min_y:", min_y)
                     #pos += widths.elements/2.0
-                    ax.bar(pos, y, yerr=err,
+                    # matplotlib expects [[err_low1, err_low2], [err_hi1, err_hi2]]
+                    ax.bar(pos, y, yerr=[[err_low], [err_high]],
                             width=widths.elements,
                             edgecolor=element_color(conf,k),
                             hatch=element_hatch(conf,k),
