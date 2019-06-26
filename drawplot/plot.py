@@ -204,12 +204,13 @@ def draw (
             nb_decimals += 1
             step = np.round((max_y - min_y) / nb_steps,decimals=nb_decimals)
         yhi = max_y + (step - max_y % step)
-        ylo = min_y - min_y % step if baseline else 0.0
+        ylo = min_y - (min_y % step) if baseline else 0.0
         yticks = np.arange(np.round(ylo,decimals=nb_decimals),yhi+step,step)
         if baseline:
-            yticks = np.concatenate((np.arange(1.0,ylo,-step)[::-1][:-1],np.arange(1.0,yhi+step,step)))
+            yticks = np.concatenate((np.arange(1.0,ylo-step,-step)[::-1][:-1],np.arange(1.0,yhi+step,step)))
             if yticks[0] == 1.0:
                 yticks = np.insert(yticks,0,1.0-step)
+        # print("yticks =", yticks)
         ax.set_ylim(yticks[0], yticks[-1])
         ax.set_yticks(yticks)
         if y_as_percent:
