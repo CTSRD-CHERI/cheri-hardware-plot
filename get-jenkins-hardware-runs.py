@@ -30,6 +30,7 @@
 # OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
 # SUCH DAMAGE.
 #
+import subprocess
 from enum import Enum
 import argparse
 import json
@@ -46,6 +47,7 @@ class Jobs(Enum):
     Olden = "bluehive-benchmark-olden"
     Mibench = "bluehive-benchmark-mibench"
     Duktape = "bluehive-benchmark-octane-duktape"
+    Spec = "bluehive-benchmark-spec"
 
 
 def jobargs_str(bitfile, isa, sdk, tgt_arch, tstruct):
@@ -68,10 +70,12 @@ parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFo
 parser.add_argument("--latest-only", action="store_true",
                     help="Only fetch the csv for the last successful run")
 parser.add_argument("--subset", help="Subset of job csvs to fetch", default="19aug2017",
-                    choices=["19aug2017", "cheriabi", "cap-table", "latest"])
+                    choices=["19aug2017", "cheriabi", "cap-table", "latest", "custom"])
 jobs_lowercase = [job.name.lower() for job in Jobs]
 parser.add_argument("--jobs", nargs=argparse.ONE_OR_MORE, help="Subset of job csvs to fetch",
                     choices=jobs_lowercase, default=jobs_lowercase)
+parser.add_argument("--job-numbers", nargs=argparse.ONE_OR_MORE, help="List of job numbers to fetch")
+parser.add_argument("--include-cheri256", action="store_true", help="Also fetch CHERI256 results")
 try:
     import argcomplete
     argcomplete.autocomplete(parser)
@@ -117,6 +121,7 @@ def get_last_successful_run(job: Jobs) -> int:
 duktape_jobs = []
 olden_jobs = []
 mibench_jobs = []
+spec_jobs = []
 
 if args.subset == "cheriabi":
     # starting 10th august / cheriabi deadline
@@ -133,6 +138,11 @@ elif args.subset == "cap-table":
     duktape_jobs = []
     olden_jobs = [550, 560]
     mibench_jobs = [496, 503]
+elif args.subset == "custom":
+    duktape_jobs = [int(x) for x in args.job_numbers]
+    mibench_jobs = [int(x) for x in args.job_numbers]
+    olden_jobs = [int(x) for x in args.job_numbers]
+    spec_jobs = [int(x) for x in args.job_numbers]
 
 # Allow fetching only the latest job
 if args.subset == "latest" or args.latest_only:
@@ -145,16 +155,22 @@ if args.subset == "latest" or args.latest_only:
 
 # XXXAR: no idea what the actual job number is where this was changed, let's just use something
 def includes_tstruct_0(job, job_num):
+    if job == Jobs.Spec.value:
+        return False
     # TODO: find the right numbers
     return job_num < 400
 
 
 def includes_mips_sdk(job, job_num):
+    if job == Jobs.Spec.value:
+        return False
     # TODO: find the right numbers
     return job_num < 400
 
 
 def includes_mips_on_256_bitfile(job, job_num):
+    if job == Jobs.Spec.value:
+        return False
     # most runs use the cheri128 bitfile
     # TODO: do we need this?
     return job_num < 400
@@ -162,16 +178,17 @@ def includes_mips_on_256_bitfile(job, job_num):
 
 def includes_beri_bitfile(job, job_num):
     # most runs use the cheri128 bitfile for running MIPS (for memcpy performance)
-    return job_num < 400
-
+    return job != Jobs.Spec.value and job_num < 400
 
 def includes_isa_column(job, job_num):
     if job == Jobs.Olden.value:
         return job_num > 550
-    if job == Jobs.Mibench.value:
+    elif job == Jobs.Mibench.value:
         return job_num > 493
     elif job == Jobs.Duktape.value:
         return False
+    elif job == Jobs.Spec.value:
+        return True
     assert False, "Bad job " + job
 
 
@@ -192,6 +209,8 @@ if Jobs.Olden.name.lower() in args.jobs:
     jobs += [(Jobs.Olden.value, olden_jobs)]
 if Jobs.Mibench.name.lower() in args.jobs:
     jobs += [(Jobs.Mibench.value, mibench_jobs)]
+if Jobs.Spec.name.lower() in args.jobs:
+    jobs += [(Jobs.Spec.value, spec_jobs)]
 
 bitfile_cpus = ["beri", "cheri128", "cheri256"]
 tgt_arch_cpus = ["mips", "cheri128", "cheri256"]
@@ -222,27 +241,23 @@ tstructs = ["0", "0_256"]
 
 
 def is_valid_job_config(bitfile, isa, sdk, target_arch, tstruct, job_name, job_num):
-    # we run mips on cheri128 starting after some job
-    if bitfile == "beri":
-        if not includes_beri_bitfile(job_name, job_num):
+    # Only pcrel for spec
+    if job_name == Jobs.Spec.value:
+        if isa != "cap-table-pcrel":
             return False
-        if tstruct == "0_256":
-            return False
-    # no more tstruct 0 for CHERI builds after some job#
-    elif tstruct == "0" and not includes_tstruct_0(job_name, job_num):
-        return False
-    # no more MIPS sdk builds after some build:
-    if sdk == "mips" and not includes_mips_sdk(job_name, job_num):
-        return False
-
-    if job_name == Jobs.Olden.value and job_num >= 900:
+        print(locals())
+    elif job_name == Jobs.Olden.value and job_num >= 900:
         # No more vanilla, nobounds
         # only includes legacy legacy-nobounds cap-table-pcrel
         if isa not in ("legacy", "legacy-nobounds", "cap-table-pcrel"):
             return False
-
+    elif job_name == Jobs.Mibench.value and job_num >= 1200:
+        # No more vanilla, nobounds
+        # only includes legacy legacy-nobounds cap-table-pcrel
+        if isa not in ("legacy", "mips-asan", "cap-table-pcrel"):
+            return False
     # cap-table is only valid for some builds:
-    if isa in ("cap-table", "nobounds"):
+    elif isa in ("cap-table", "nobounds"):
         if not includes_isa_column(job_name, job_num):
             return False
         if isa == "nobounds" and not includes_nobounds_isa(job_name, job_num):
@@ -267,16 +282,43 @@ def is_valid_job_config(bitfile, isa, sdk, target_arch, tstruct, job_name, job_n
 
 # This is insanely inefficient if we ever end up with more than a few job configs:
 Config = namedtuple("Config", ("bitfile_cpu", "isa", "sdk_cpu", "target_arch_cpu", "tstruct", "job", "job_num"))
-confs = [Config(bitfile, isa, sdk, target_arch, tstruct, job_name, job_num) for bitfile in bitfile_cpus
-         for isa in ("legacy", "legacy-nobounds", "vanilla", "cap-table", "cap-table-pcrel", "nobounds")
-         for sdk in sdk_cpus
-         for target_arch in tgt_arch_cpus
-         for tstruct in tstructs
-         for job_name, e1 in jobs
-         for job_num in e1
-         if is_valid_job_config(bitfile, isa, sdk, target_arch, tstruct, job_name, job_num)
-         ]  # type: typing.List[Conf]
+confs = []  # type: typing.List[Conf]
+for bitfile in bitfile_cpus:
+    if bitfile == "cheri256" and not args.include_cheri256:
+        continue
+    for job_name, job_numbers in jobs:
+        for job_num in job_numbers:
+            # we run mips on cheri128 starting after some job
+            if bitfile == "beri" and not includes_beri_bitfile(job_name, job_num):
+                continue
+            for isa in ("legacy", "legacy-nobounds", "vanilla", "cap-table", "cap-table-pcrel", "nobounds"):
+                for sdk in sdk_cpus:
+                    if sdk == "cheri256" and not args.include_cheri256:
+                        continue
+                    if bitfile == "beri" and sdk.startswith("cheri"):
+                        continue
+                    if bitfile.startswith("cheri") and sdk.startswith("cheri") and bitfile != sdk:
+                        continue  # can't run cheri128 on cheri256 bitfile
+                    # no more MIPS sdk builds after some build:
+                    if sdk == "mips" and not includes_mips_sdk(job_name, job_num):
+                        continue
+                    for target_arch in tgt_arch_cpus:
+                        if target_arch == "cheri256" and not args.include_cheri256:
+                            continue
+                        if sdk.startswith("cheri") and target_arch.startswith("cheri") and sdk != target_arch:
+                            continue  # can't run cheri128 on cheri256 bitfile
+                        if bitfile == "cheri256" and target_arch == "mips" and not includes_mips_on_256_bitfile(job_name, job_num):
+                            continue
+                        for tstruct in tstructs:
+                            if bitfile == "beri" and tstruct == "0_256":
+                                continue
+                            # no more tstruct 0 for CHERI builds after some job#
+                            if tstruct == "0" and not includes_tstruct_0(job_name, job_num):
+                                continue
+                            if is_valid_job_config(bitfile, isa, sdk, target_arch, tstruct, job_name, job_num):
+                                confs.append(Config(bitfile, isa, sdk, target_arch, tstruct, job_name, job_num))
 
+assert confs
 for conf in confs:
     print(conf)
 dfs = []
@@ -290,7 +332,16 @@ for bitfile_cpu, isa, sdk_cpu, tgt_arch_cpu, tstruct, job, jobnum in confs:
     url += filename
     run_cmd = base_cmd + [url]
     print(" ".join(run_cmd))
-    sub.check_call(run_cmd)
+    try:
+        sub.check_call(run_cmd)
+    except subprocess.CalledProcessError:
+        print("WARNING: Could not find a csv file for configuration",
+              "bitfile_cpu={}, isa={}, sdk_cpu={}, tgt_arch_cpu={}, tstruct={}, job={}, jobnum={}".format(
+                  bitfile_cpu, isa, sdk_cpu, tgt_arch_cpu, tstruct, job, jobnum), file=sys.stderr)
+        if input("Continue? y/n").lower().startswith("y"):
+            continue
+        else:
+            sys.exit(1)
     if Path(filename).stat().st_size == 0:
         print("WARNING: Could not find a csv file for configuration",
               "bitfile_cpu={}, isa={}, sdk_cpu={}, tgt_arch_cpu={}, tstruct={}, job={}, jobnum={}".format(
