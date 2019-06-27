@@ -48,18 +48,26 @@ class Jobs(Enum):
     Mibench = "bluehive-benchmark-mibench"
     Duktape = "bluehive-benchmark-octane-duktape"
     Spec = "bluehive-benchmark-spec"
+    InitDB = "bluehive-benchmark-postgres-initdb"
 
 
-def jobargs_str(bitfile, isa, sdk, tgt_arch, tstruct):
+def jobargs_str(job, bitfile, isa: str, sdk, tgt_arch, tstruct):
+    if job == Jobs.InitDB.value:
+        # CPU=cheri128,ISA=cap-table-pcrel,LINKAGE=dynamic,label=bluehive/
+        real_isa, linkage = isa.rsplit("-", maxsplit=1)
+        return "CPU={},ISA={},LINKAGE={},label=bluehive/".format(tgt_arch, real_isa, linkage)
     isa_arg = ",ISA=" + isa if isa is not None else ""
     return "BITFILE_CPU={}{},SDK_CPU={},TARGET_ARCH_CPU={},TSTRUCT={},label=bluehive".format(bitfile, isa_arg, sdk,
                                                                                              tgt_arch, tstruct)
 
 
-def artifact_str(a, bitfile, isa, c, d, e, f):
+def artifact_str(job, bitfile, isa, sdk_cpu, tgt_arch_cpu, tstruct, jobnum):
+    if job == Jobs.InitDB.value:
+        # Same file name for all configurations
+        return "postgres.statcounters.csv"
     isa_arg = "_ISA=" + isa if isa is not None else ""
     return "statcounters-jenkins-{}-BITFILE_CPU={}{}_SDK_CPU={}_TARGET_ARCH_CPU={}_TSTRUCT={}_label=bluehive-{}.csv".format(
-        a, bitfile, isa_arg, c, d, e, f)
+        job, bitfile, isa_arg, sdk_cpu, tgt_arch_cpu, tstruct, jobnum)
 
 
 def conf_str(a, b, c, d):
@@ -122,6 +130,7 @@ duktape_jobs = []
 olden_jobs = []
 mibench_jobs = []
 spec_jobs = []
+initdb_jobs = []
 
 if args.subset == "cheriabi":
     # starting 10th august / cheriabi deadline
@@ -143,6 +152,7 @@ elif args.subset == "custom":
     mibench_jobs = [int(x) for x in args.job_numbers]
     olden_jobs = [int(x) for x in args.job_numbers]
     spec_jobs = [int(x) for x in args.job_numbers]
+    initdb_jobs = [int(x) for x in args.job_numbers]
 
 # Allow fetching only the latest job
 if args.subset == "latest" or args.latest_only:
@@ -152,6 +162,10 @@ if args.subset == "latest" or args.latest_only:
         olden_jobs = [get_last_successful_run(Jobs.Olden)]
     if Jobs.Mibench.name.lower() in args.jobs:
         mibench_jobs = [get_last_successful_run(Jobs.Mibench)]
+    if Jobs.Spec.name.lower() in args.jobs:
+        spec_jobs = [get_last_successful_run(Jobs.Spec)]
+    if Jobs.InitDB.name.lower() in args.jobs:
+        initdb_jobs = [get_last_successful_run(Jobs.InitDB)]
 
 # XXXAR: no idea what the actual job number is where this was changed, let's just use something
 def includes_tstruct_0(job, job_num):
@@ -187,7 +201,7 @@ def includes_isa_column(job, job_num):
         return job_num > 493
     elif job == Jobs.Duktape.value:
         return False
-    elif job == Jobs.Spec.value:
+    elif job == Jobs.Spec.value or job == Jobs.InitDB.value:
         return True
     assert False, "Bad job " + job
 
@@ -318,6 +332,29 @@ for bitfile in bitfile_cpus:
                             if is_valid_job_config(bitfile, isa, sdk, target_arch, tstruct, job_name, job_num):
                                 confs.append(Config(bitfile, isa, sdk, target_arch, tstruct, job_name, job_num))
 
+
+# Postgres uses a different naming scheme:
+if Jobs.InitDB.name.lower() in args.jobs:
+    archs = ["mips", "mips-asan", "cheri128"]
+    # only cap-table-pcrel running:
+    isa_base = "cap-table-pcrel"
+    tstruct = None
+    job_name = Jobs.InitDB.value
+    if args.include_cheri256:
+        archs.append("cheri256")
+    for job_num in initdb_jobs:
+        for linkage in ("static", "dynamic"):
+            isa = isa_base + "-" + linkage
+            # CPU=cheri128,ISA=cap-table-pcrel,LINKAGE=dynamic,label=bluehive/
+            for target_arch in archs:
+                if target_arch.startswith("mips"):
+                    sdk = "cheri128"
+                    bitfile = "cheri128"
+                else:
+                    sdk = target_arch
+                    bitfile = target_arch
+                confs.append(Config(bitfile, isa, sdk, target_arch, tstruct, job_name, job_num))
+
 assert confs
 for conf in confs:
     print(conf)
@@ -328,7 +365,7 @@ for bitfile_cpu, isa, sdk_cpu, tgt_arch_cpu, tstruct, job, jobnum in confs:
     url = jenkins
     url += "/job/" + job
     filename = artifact_str(job, bitfile_cpu, isa, sdk_cpu, tgt_arch_cpu, tstruct, jobnum)
-    url += "/{}/{}/artifact/".format(jobnum, jobargs_str(bitfile_cpu, isa, sdk_cpu, tgt_arch_cpu, tstruct))
+    url += "/{}/{}/artifact/".format(jobnum, jobargs_str(job, bitfile_cpu, isa, sdk_cpu, tgt_arch_cpu, tstruct))
     url += filename
     run_cmd = base_cmd + [url]
     print(" ".join(run_cmd))
@@ -342,13 +379,17 @@ for bitfile_cpu, isa, sdk_cpu, tgt_arch_cpu, tstruct, job, jobnum in confs:
             continue
         else:
             sys.exit(1)
-    if Path(filename).stat().st_size == 0:
+    out_path = Path(filename)
+    if out_path.stat().st_size == 0:
         print("WARNING: Could not find a csv file for configuration",
               "bitfile_cpu={}, isa={}, sdk_cpu={}, tgt_arch_cpu={}, tstruct={}, job={}, jobnum={}".format(
                   bitfile_cpu, isa, sdk_cpu, tgt_arch_cpu, tstruct, job, jobnum), file=sys.stderr)
         Path(filename).unlink()
         continue
     data = pd.read_csv(filename)
+    if job == Jobs.InitDB.value:
+        # keep all the temporary files:
+        out_path.rename(out_path.with_name(out_path.stem + "-" + tgt_arch_cpu + "-" + isa + "-" + str(job_num) + ".csv"))
     data.insert(0, 'table-struct', tstruct)
     if isa is not None and isa != "vanilla":
         tgt_arch_cpu += "-" + isa
