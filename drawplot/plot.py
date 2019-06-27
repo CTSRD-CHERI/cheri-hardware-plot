@@ -129,9 +129,11 @@ def draw (
                     assert err_low >= 0, err_low
                     assert err_high >= 0, err_high
                     # print(y, err_low, err_high)
-                    max_y = y + err_high if max_y is None else max(y + err_high, max_y)
-                    min_y = y - err_low if min_y is None else min(y - err_low, min_y)
-                    print(metric, "min_y:", min_y)
+                    high_value = y + err_high
+                    low_value = y - err_low
+                    max_y = high_value if max_y is None else max(high_value, max_y)
+                    min_y = low_value if min_y is None else min(low_value, min_y)
+                    print(bench, conf, metric, y, "low=" + str(low_value), "high=" + str(high_value))
                     #pos += widths.elements/2.0
                     # matplotlib expects [[err_low1, err_low2], [err_hi1, err_hi2]]
                     ax.bar(pos, y, yerr=[[err_low], [err_high]],
