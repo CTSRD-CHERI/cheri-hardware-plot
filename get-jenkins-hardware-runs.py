@@ -254,6 +254,22 @@ tstructs = ["0", "0_256"]
 #        sub.run(run_cmd)
 
 
+def fixup_initdb_data(df: pd.DataFrame):
+    # Initdb spawns 5 postgres processes, rename those to have a different progname so we can measure all
+    for i, row in df.iterrows():
+        progname = str(row['progname'])
+        count = i % 6
+        if progname == 'postgres':
+            assert count != 5, "every sixth row should have name initdb"
+            new_progname = progname + "-child-" + str(count + 1)
+            df.set_value(i, 'progname', new_progname)
+        else:
+            # the final row of each run should be initdb
+            assert count == 5, count
+            assert progname == "initdb", progname
+    return df
+
+
 def is_valid_job_config(bitfile, isa, sdk, target_arch, tstruct, job_name, job_num):
     # Only pcrel for spec
     if job_name == Jobs.Spec.value:
@@ -338,7 +354,7 @@ if Jobs.InitDB.name.lower() in args.jobs:
     archs = ["mips", "mips-asan", "cheri128"]
     # only cap-table-pcrel running:
     isa_base = "cap-table-pcrel"
-    tstruct = None
+    tstruct = "0_256"
     job_name = Jobs.InitDB.value
     if args.include_cheri256:
         archs.append("cheri256")
@@ -388,6 +404,7 @@ for bitfile_cpu, isa, sdk_cpu, tgt_arch_cpu, tstruct, job, jobnum in confs:
         continue
     data = pd.read_csv(filename)
     if job == Jobs.InitDB.value:
+        data = fixup_initdb_data(data)
         # keep all the temporary files:
         out_path.rename(out_path.with_name(out_path.stem + "-" + tgt_arch_cpu + "-" + isa + "-" + str(job_num) + ".csv"))
     data.insert(0, 'table-struct', tstruct)
