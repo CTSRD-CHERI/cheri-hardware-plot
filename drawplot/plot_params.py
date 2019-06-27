@@ -45,10 +45,18 @@ def bench_name (n):
         "gbemu": "octane-gbemu",
         "pdfjs": "octane-pdfjs",
         "splay": "octane-splay",
-        "treeadd 21 1 0": "olden-treeadd",
+        "treeadd 21 10 0": "olden-treeadd",
         "perimeter 10 0": "olden-perimeter",
         "mst 1024 0": "olden-mst",
-        "bisort 250000 0": "olden-bisort"
+        "bisort 250000 0": "olden-bisort",
+        "bisort 250000 0_alloc": "olden-bisort (allocate)",
+        "bisort 250000 0_exec": "olden-bisort (execute)",
+        "treeadd 21 10 0_alloc": "olden-treeadd (allocate)",
+        "treeadd 21 10 0_exec": "olden-treeadd (execute)",
+        "perimeter 10 0_alloc": "olden-perimeter (allocate)",
+        "perimeter 10 0_exec": "olden-perimeter (execute)",
+        "mst 1024 0_alloc": "olden-mst (allocate)",
+        "mst 1024 0_exec": "olden-mst (execute)"
     }.get(n,n)
 
 def arch_name (n):
