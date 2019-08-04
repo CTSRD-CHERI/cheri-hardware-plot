@@ -179,7 +179,7 @@ def draw (
 
             # Need to escape underscores for latex output!
             # FIXME: why doesn't matplotlib escape this??
-            xticklabels.append(bench_name(bench).replace("_", "\_"))
+            xticklabels.append(bench_name(bench).replace("_", "\\_"))
             # skip space between benchmarks
             if j < family.index.get_level_values('progname').unique().size - 1:
                 pos += widths.bench_spaces
@@ -405,7 +405,8 @@ def plot (
                 legend_lbl.append("({} tag table)".format(tstruct_name(conf[3])))
         if metrics_in_legend:
             needs_legend = True
-            legend_lbl.append(metric_name(m))
+            # XXXAR might need to escape _ for latex output:
+            legend_lbl.append(metric_name(m).replace("_", "\\_"))
         to_legend.append(mpatches.Patch(facecolor='none', hatch=element_hatch(conf,i), edgecolor=element_color(conf,i), label=" ".join(legend_lbl)))
     if needs_legend:
         if legend_columns == None:

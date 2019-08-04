@@ -58,7 +58,7 @@ bars.add_argument('--config', default=None, type=str, nargs=4, action='append',
                   # there are now more options: choices=['beri','mips','cheri128','cheri256','0','0_256'],
                   metavar=('BITFILE_CPU','SDK_CPU','TGT_ARCH_CPU','TSTRUCT'),
         help="Adds the ('BITFILE_CPU','SDK_CPU','TGT_ARCH_CPU','TSTRUCT') configuration to the plot.")
-metrics = ['cycles', 'instructions', 'itlb_miss', 'dtlb_miss', 'tlb_inst_share',
+metrics = ['cycles', 'instructions', 'itlb_miss', 'dtlb_miss', 'tlb_inst_share', 'inst_user', 'inst_kernel',
 'icache_write_hit', 'icache_write_miss', 'icache_read_hit', 'icache_read_miss', 'icache_evict',
 'dcache_write_hit', 'dcache_write_miss', 'dcache_read_hit', 'dcache_read_miss', 'dcache_evict', 'dcache_set_tag_write', 'dcache_set_tag_read',
 'l2cache_write_hit', 'l2cache_write_miss', 'l2cache_read_hit', 'l2cache_read_miss', 'l2cache_evict', 'l2cache_set_tag_write', 'l2cache_set_tag_read',

@@ -35,6 +35,8 @@ def metric_name (m):
     return {
         "cycles": " cpu cycles",
         "instructions": " cpu instructions",
+        "inst_user": " cpu instructions (userspace)",
+        "inst_kernel": " cpu instructions (kernel)",
         "l2cache_misses": "l2cache misses",
         "l2cache_flits": "l2cache flits"
     }.get(m, m)
