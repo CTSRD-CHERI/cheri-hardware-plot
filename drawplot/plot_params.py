@@ -82,7 +82,7 @@ def tstruct_name (n):
     }.get(n,n)
 
 def element_color(conf,i):
-    clr = ['blue','red','green','orange','purple']
+    clr = ['blue','red','green','orange','cyan','purple','darkorange','tan','lime','magenta','olive']
     return {
         ("mips","mips","0"): "orange",
         ("cheri256","mips","0"): "green",
@@ -90,7 +90,7 @@ def element_color(conf,i):
         ("cheri256","cheri256","0_256"): (0.2,0.45,1),
         ("cheri128","cheri128","0"): "red",
         ("cheri128","cheri128","0_256"): (1,0.45,0.2)
-    }.get((conf[1],conf[2],conf[3]),clr[i%5])
+    }.get((conf[1],conf[2],conf[3]),clr[i%len(clr)])
 
 def element_hatch(conf,i):
     htch = ['////','\\\\\\\\','XXX','+++','---']
@@ -101,7 +101,7 @@ def element_hatch(conf,i):
         ("cheri256","cheri256","0_256"): "\\\\\\\\",
         ("cheri128","cheri128","0"): "\\\\",
         ("cheri128","cheri128","0_256"): "////"
-    }.get((conf[1],conf[2],conf[3]),htch[i%5])
+    }.get((conf[1],conf[2],conf[3]),htch[i%len(htch)])
 
 Widths = namedtuple('Widths', ['elements', 'element_spaces', 'bench_spaces', 'family_spaces', 'buffers'])
 # compute the various with between graph elements, based on the number of
