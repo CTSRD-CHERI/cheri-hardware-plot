@@ -95,8 +95,8 @@ def draw (
             # for each conf-metric pair
             ###################################################################
             for k,(conf, metric) in enumerate([(x,y)
-                                                for x in confs
-                                                for y in metrics]):
+                                                for y in metrics
+                                                for x in confs]):
                 conf_data = g.xs(
                         tuple(conf),
                         level=(
@@ -392,7 +392,7 @@ def plot (
     needs_legend = False
     if lbl:
         needs_legend = True
-    for i,(conf,m) in enumerate([(x,y) for x in configs for y in metrics]):
+    for i,(conf,m) in enumerate([(x,y) for y in metrics for x in configs]):
         legend_lbl = []
         if archs_in_legend:
             needs_legend = True
