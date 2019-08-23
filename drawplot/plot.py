@@ -422,7 +422,8 @@ def plot (
 
     ax.set_xlim(0,100.0)
     ax.set_xticks(xticks)
-    ax.set_xticklabels(xticklabels, va='top', ha='center', rotation=90)
+    # ax.set_xticklabels(xticklabels, va='top', ha='center', rotation=90)
+    ax.set_xticklabels(xticklabels, va='top', ha='right', rotation=60)
     ax.tick_params(which='both', bottom='off', top='off',right='off')
     if ylim:
         ax0.set_ylim(*ylim)
