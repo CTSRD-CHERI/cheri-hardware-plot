@@ -49,7 +49,7 @@ GraphType = Enum('GraphType', ['bar','box'])
 # internal graph draw function
 def draw (
         ax, families, confs, metrics, widths, tabulate,
-        gtype=GraphType.bar, baseline=None, y_as_percent=False, add_average=False):
+        gtype=GraphType.bar, baseline=None, y_as_percent=False, ylim=None):
     """
     Wraps the matplotlib call to the bar() / boxplot() method.
 
@@ -84,27 +84,28 @@ def draw (
     worst_and_best_case = {}
     ###########################################################################
     for i,family in enumerate(families):
+        assert len(family) >= 1, family
         # for each benchmark in the current family
         #######################################################################
         for j,(bench,g) in enumerate(family.groupby(level='progname')):
             # init baseline if necessary
             if baseline:
                 baseline_data = g.xs(
-                        tuple(baseline),
-                        level=(
-                            'bitfile-cpu','sdk-cpu',
-                            'target-arch-cpu','table-struct'))
+                    tuple(baseline),
+                    level=(
+                        'bitfile-cpu','sdk-cpu',
+                        'target-arch-cpu','table-struct'))
             pos_start = pos
             # for each conf-metric pair
             ###################################################################
             for k,(conf, metric) in enumerate([(x,y)
-                                                for y in metrics
-                                                for x in confs]):
+                                               for y in metrics
+                                               for x in confs]):
                 conf_data = g.xs(
-                        tuple(conf),
-                        level=(
-                            'bitfile-cpu','sdk-cpu',
-                            'target-arch-cpu','table-struct'))
+                    tuple(conf),
+                    level=(
+                        'bitfile-cpu','sdk-cpu',
+                        'target-arch-cpu','table-struct'))
                 row=conf+[metric]
                 ############
                 # Bar plot #
@@ -158,17 +159,17 @@ def draw (
                     #pos += widths.elements/2.0
                     # matplotlib expects [[err_low1, err_low2], [err_hi1, err_hi2]]
                     ax.bar(pos, y, yerr=[[err_low], [err_high]],
-                            width=widths.elements,
-                            edgecolor=element_color(conf,k),
-                            hatch=element_hatch(conf,k),
-                            zorder=10,
-                            color='none',
-                            error_kw={
-                                'ecolor': 'black',
-                                'elinewidth': 1,
-                                'capsize': widths.elements,
-                                'zorder': 11
-                            })
+                           width=widths.elements,
+                           edgecolor=element_color(conf,k),
+                           hatch=element_hatch(conf,k),
+                           zorder=10,
+                           color='none',
+                           error_kw={
+                               'ecolor': 'black',
+                               'elinewidth': 1,
+                               'capsize': widths.elements,
+                               'zorder': 11
+                           })
                     #pos += widths.elements/2.0
                     pos += widths.elements
                 ###############################################################
@@ -177,14 +178,14 @@ def draw (
                 ###############################################################
                 elif gtype == GraphType.box:
                     y = overheads2median(
-                            conf_data[metric],
-                            np.median(baseline_data[metric]))
+                        conf_data[metric],
+                        np.median(baseline_data[metric]))
                     max_y = max([max_y]+y) if max_y else max(y)
                     min_y = min([min_y]+y) if min_y else min(y)
                     pos += widths.elements/2.0
                     ax.boxplot([y],
-                            positions=[pos],
-                            widths=widths.elements)
+                               positions=[pos],
+                               widths=widths.elements)
                     pos += widths.elements/2.0
                 ###############################################################
                 if tabulate and row in tabulate:
@@ -231,6 +232,9 @@ def draw (
 
     # pprint.pprint(worst_and_best_case)
     print("--------")
+    if ylim:
+        min_y = ylim[0]
+        max_y = ylim[1]
     ###########################################################################
     # y axis handling
     if gtype == GraphType.bar:
@@ -406,7 +410,7 @@ def plot (
         ax0 = fig.add_subplot(gs[0])
         fig.subplots_adjust(hspace=0.05)
 
-    ax, xticks, xticklabels, rows = draw(ax0, families, configs, metrics, widths, tabulate, gtype, baseline, y_as_percent)
+    ax, xticks, xticklabels, rows = draw(ax0, families, configs, metrics, widths, tabulate, gtype, baseline, y_as_percent, ylim=ylim)
 
     for a in fig.get_axes():
         a.set_xlim(0,100.0)
