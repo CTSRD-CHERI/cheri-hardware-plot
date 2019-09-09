@@ -74,8 +74,27 @@ def _load_statcounters_csv(csv: Union[Path, Iterable[Path]], metrics: List[str])
         df = pd.concat(pd.read_csv(c) for c in csv)
     # add l2cache_misses stat
     df = df.assign(l2cache_misses=lambda x: x.l2cache_read_miss + x.l2cache_write_miss)
-    df = df[["progname"] + metrics]
-    return df
+
+    if metrics is None:
+        return df
+    return df[["progname"] + metrics]
+
+
+def generate_hardware_results_csv(files: Dict[str, typing.Union[Path, Iterable[Path]]], output_file: Path):
+    dfs = []
+    for k, v in files.items():
+        df = _load_statcounters_csv(v, metrics=None)
+        df.insert(0, 'target-arch-cpu', k)
+        # old analysis script expects these values
+        df.insert(0, 'sdk-cpu', "cheri128")
+        df.insert(0, 'bitfile-cpu', "cheri128")
+        df.insert(0, 'table-struct', "0_256")
+        df = df.assign(l2cache_misses=lambda x: x.l2cache_read_miss + x.l2cache_write_miss)
+        del df['archname']
+        dfs.append(df)
+    df = pd.concat(dfs)
+    df.sort_values(["bitfile-cpu", "sdk-cpu", "target-arch-cpu", "table-struct", "progname"], inplace=True)
+    df.to_csv(str(output_file))
 
 
 def _default_metric_mapping(m: str, variant: str):
@@ -261,6 +280,8 @@ def _first_upper(s: str):
 def _latex_define_macro(prefix, name, value):
     assert isinstance(value, str)
     fullname = _first_upper(prefix) + _first_upper(name)  # camelcase
+    # Try to remove all chars that aren't valid in a latex macro name:
+    fullname = ''.join([i for i in fullname if i.isalpha()])
     print(fullname, "=", value)
     return "\\newcommand*{\\" + str(fullname) + "}{" + str(value) + "}\n"
 
@@ -307,8 +328,4 @@ def generate_latex_macros(f: Union[typing.IO, Path], data: List[BarResults], pre
         f.write(_latex_define_macro(prefix, "Max" + _first_upper(metric) + "Benchmark", str(worst.program)))
 
         for b in results.benchmark_data:
-            # Try to remove all chars that aren't valid in a latex macro name:
-            progname_escaped = b.program
-            progname_escaped = progname_escaped.replace("-", "").replace(" ", "").replace(".", "").lower()
-            progname_escaped = ''.join([i for i in progname_escaped if not i.isdigit()])
-            f.write(_latex_bench_overhead_macro(prefix, metric, progname_escaped, b.median))
+            f.write(_latex_bench_overhead_macro(prefix, metric, b.program.lower(), b.median))
