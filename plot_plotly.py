@@ -231,7 +231,7 @@ def plot_csvs_relative(files: Dict[str, typing.Union[Path, Iterable[Path]]],
                 #         size=12,
                 #         color="black"
                 #     ),
-                #     bgcolor="LightSteelBlue",
+                bgcolor="rgba(255, 255, 255, 0.5)",
                 bordercolor="Black",
                 borderwidth=2
             )
