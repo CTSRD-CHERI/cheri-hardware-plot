@@ -74,25 +74,17 @@ def generate_hardware_results_csv(files: Dict[str, typing.Union[Path, Iterable[P
 
 def _default_metric_mapping(m: str, variant: str):
     return {
-        "cycles": " CPU cycles",
-        "instructions": " Instructions",
-        "inst_user": " Instructions (userspace)",
-        "inst_kernel": " Instructions (kernel)",
+        "cycles": "CPU cycles",
+        "instructions": "Instructions",
+        "inst_user": "Instructions (userspace)",
+        "inst_kernel": "Instructions (kernel)",
         "l2cache_misses": "L2-cache misses",
         "l2cache_flits": "L2-cache flits",
     }.get(m, m)
 
 
 def _default_metric_mapping_with_variant(m: str, variant: str):
-    suffix = {
-        "cycles": " CPU cycles",
-        "instructions": " Instructions",
-        "inst_user": " Instructions (userspace)",
-        "inst_kernel": " Instructions (kernel)",
-        "l2cache_misses": "L2-cache misses",
-        "l2cache_flits": "L2-cache flits",
-    }.get(m, m)
-    return variant + " " + suffix
+    return variant + " " + _default_metric_mapping(m, variant)
 
 
 def _default_progname_mapping(n):
