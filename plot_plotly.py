@@ -3,8 +3,10 @@ from typing import *
 import plotly.graph_objects as go
 import pandas as pd
 import numpy as np
+import typing
 import functools
 from pathlib import Path
+
 
 # We want to use IQRs for benchmarks
 # Dived all values in the relative samples by the median of the baseline
@@ -37,6 +39,7 @@ def _old(df):
 
     def _p25(x):
         return np.percentile(x, 25)
+
     # agg_dict = dict()
     # for metric in metrics:
     #     agg_dict["min_" + metric] = pd.NamedAgg(column=metric, aggfunc='min')
@@ -62,15 +65,19 @@ def _normalize_values(row: pd.Series, baseline_medians: pd.DataFrame):
     return row
 
 
-def _load_statcounters_csv(csv: Path, metrics: List[str]) -> pd.DataFrame:
-    df = pd.read_csv(csv)
+def _load_statcounters_csv(csv: Union[Path, Iterable[Path]], metrics: List[str]) -> pd.DataFrame:
+    if isinstance(csv, Path):
+        df = pd.read_csv(csv)
+    else:
+        assert len(csv) > 0
+        df = pd.concat(pd.read_csv(c) for c in csv)
     # add l2cache_misses stat
     df = df.assign(l2cache_misses=lambda x: x.l2cache_read_miss + x.l2cache_write_miss)
     df = df[["progname"] + metrics]
     return df
 
 
-def _default_metric_mapping(m: str):
+def _default_metric_mapping(m: str, variant: str):
     return {
         "cycles": " CPU cycles",
         "instructions": " Instructions",
@@ -79,6 +86,18 @@ def _default_metric_mapping(m: str):
         "l2cache_misses": "L2-cache misses",
         "l2cache_flits": "L2-cache flits",
     }.get(m, m)
+
+
+def _default_metric_mapping_with_variant(m: str, variant: str):
+    suffix = {
+        "cycles": " CPU cycles",
+        "instructions": " Instructions",
+        "inst_user": " Instructions (userspace)",
+        "inst_kernel": " Instructions (kernel)",
+        "l2cache_misses": "L2-cache misses",
+        "l2cache_flits": "L2-cache flits",
+    }.get(m, m)
+    return variant + " " + suffix
 
 
 def _default_progname_mapping(n):
@@ -107,32 +126,46 @@ class BarResults:
         self.p75s = np.array([x.p75 for x in self.benchmark_data])
         self.p25s = np.array([x.p25 for x in self.benchmark_data])
 
-    def error_bars(self):
-        return dict(type='data', symmetric=False, array=self.p75s - self.medians,
-                    arrayminus=self.medians - self.p25s)
+    def error_bars(self, error_y: go.bar.ErrorY):
+        data_args = dict(type='data', symmetric=False, array=self.p75s - self.medians,
+                         arrayminus=self.medians - self.p25s)
+        if error_y is None:
+            error_y = go.bar.ErrorY()
+        error_y.update(data_args)
+        if error_y.thickness is None:
+            error_y.thickness = 1
+        return error_y
 
-    def create_bar(self):
+    def create_bar(self, text_in_bar: bool, error_bar_args: go.bar.ErrorY):
         return go.Bar(
             name=self.metric,
             x=[x.program for x in self.benchmark_data],
             y=self.medians,
-            error_y=self.error_bars(),
-            text=["{0:.2f}%".format(x * 100) for x in self.medians],
-            textfont=dict(size=18),
+            error_y=self.error_bars(error_bar_args),
+            text=["{0:.2f}%".format(x * 100) for x in self.medians] if text_in_bar else None,
+            # textfont=dict(size=18),
             textposition='auto',
         )
 
 
-def plot_csvs_relative(files: Dict[str, Path], baseline: Path, *, label: str = "Relative overhead compared to baseline",
-                       metrics: List[str]=None, metric_mapping: Callable[[str], str] = _default_metric_mapping,
+def plot_csvs_relative(files: Dict[str, typing.Union[Path, Iterable[Path]]],
+                       baseline: typing.Union[Path, Iterable[Path]], *,
+                       label: str = "Relative overhead compared to baseline",
+                       metrics: List[str] = None, metric_mapping: Callable[[str, str], str] = _default_metric_mapping,
                        progname_mapping: Callable[[str], str] = _default_progname_mapping,
-                       legend_inside=True) -> Tuple[go.Figure, List[BarResults]]:
+                       legend_inside=True, include_variant_in_legend=False, text_in_bar=True, tick_angle: float = None,
+                       error_bar_args: go.bar.ErrorY = None) -> Tuple[go.Figure, List[BarResults]]:
     if metrics is None:
         metrics = ["cycles", "instructions", "l2cache_misses"]
+    # Add support for metric + variant mapping
+    if metric_mapping is _default_metric_mapping and include_variant_in_legend:
+        metric_mapping = _default_metric_mapping_with_variant
+
     baseline_df = _load_statcounters_csv(baseline, metrics)
     baseline_medians = baseline_df.groupby("progname").median()
     fig = go.Figure()
     bar_results = []
+    all_programs = set()
     for name, csv in files.items():
         orig_df = _load_statcounters_csv(csv, metrics)
         # Normalize by basline median
@@ -142,20 +175,50 @@ def plot_csvs_relative(files: Dict[str, Path], baseline: Path, *, label: str = "
         for metric in metrics:
             data = dict()
             for progname, group in grouped:
+                all_programs.add(progname)
                 data[progname_mapping(progname)] = group[metric]
-            result = BarResults(data, metric_mapping(metric))
+            result = BarResults(data, metric_mapping(metric, name))
             bar_results.append(result)
-            fig.add_trace(result.create_bar())
+            fig.add_trace(result.create_bar(text_in_bar=text_in_bar, error_bar_args=error_bar_args))
 
     yaxis = go.layout.YAxis(title=dict(text=label, font=dict(size=18)))
     yaxis.tickformat = ',.0%'  # percentage with 0 fractional digits
+
+    # Add alternating shading:
+    shapes = []  # type: List[go.layout.Shape]
+    num_bars = len(all_programs)
+    for i in range(0, num_bars):
+        if (i % 2) == 1:
+            # insert a shaded background for this bar
+            s = go.layout.Shape(
+                type="rect",
+                # x-reference is assigned to the x-values
+                # xref="x",
+                xref="paper",  # actually it works better if we assign to the 0,1 range
+                # y-reference is assigned to the plot paper [0,1]
+                yref="paper",
+                x0=i / num_bars,
+                y0=0,
+                x1=(i + 1) / num_bars,
+                y1=1,
+                fillcolor="Gainsboro",
+                opacity=0.5,
+                layer="below",
+                line_width=0,
+            )
+            print("Adding shaded background from", s.x0, "to", s.x1)
+            shapes.append(s)
+
+
     fig.update_layout(
         barmode='group',
-        yaxis=yaxis,
+        yaxis=yaxis, shapes=shapes,
         showlegend=True,
     )
     fig.update_yaxes(automargin=True)
     fig.update_xaxes(automargin=True)
+    if tick_angle:
+        fig.update_xaxes(tickangle=tick_angle)
     fig.update_layout(
         margin=dict(
             r=0,
@@ -169,14 +232,14 @@ def plot_csvs_relative(files: Dict[str, Path], baseline: Path, *, label: str = "
                 x=0,
                 y=1,
                 traceorder="normal",
-            #     font=dict(
-            #         family="sans-serif",
-            #         size=12,
-            #         color="black"
-            #     ),
-            #     bgcolor="LightSteelBlue",
-                 bordercolor="Black",
-                 borderwidth=2
+                #     font=dict(
+                #         family="sans-serif",
+                #         size=12,
+                #         color="black"
+                #     ),
+                #     bgcolor="LightSteelBlue",
+                bordercolor="Black",
+                borderwidth=2
             )
         )
 
