@@ -4,6 +4,7 @@ import plotly.graph_objects as go
 import pandas as pd
 import numpy as np
 import typing
+import operator
 import functools
 from pathlib import Path
 
@@ -117,11 +118,12 @@ class _RelativeBenchmarkData:
 
 
 class BarResults:
-    def __init__(self, data: Mapping[str, pd.Series], metric: str):
+    def __init__(self, data: Mapping[str, pd.Series], metric: str, raw_metric: str):
         self.benchmark_data = []
-        self.metric = metric
+        self.human_metric = metric
+        self.raw_metric = raw_metric
         for k, v in data.items():
-            self.benchmark_data.append(_RelativeBenchmarkData(v, metric, k))
+            self.benchmark_data.append(_RelativeBenchmarkData(v, raw_metric, k))
         self.medians = np.array([x.median for x in self.benchmark_data])
         self.p75s = np.array([x.p75 for x in self.benchmark_data])
         self.p25s = np.array([x.p25 for x in self.benchmark_data])
@@ -143,7 +145,7 @@ class BarResults:
 
     def create_bar(self, text_in_bar: bool, error_bar_args: go.bar.ErrorY):
         return go.Bar(
-            name=self.metric,
+            name=self.human_metric,
             x=[x.program for x in self.benchmark_data],
             y=self.medians,
             error_y=self.error_bars(error_bar_args),
@@ -182,7 +184,7 @@ def plot_csvs_relative(files: Dict[str, typing.Union[Path, Iterable[Path]]],
             for progname, group in grouped:
                 all_programs.add(progname)
                 data[progname_mapping(progname)] = group[metric]
-            result = BarResults(data, metric_mapping(metric, name))
+            result = BarResults(data, metric_mapping(metric, name), raw_metric=metric)
             bar_results.append(result)
             fig.add_trace(result.create_bar(text_in_bar=text_in_bar, error_bar_args=error_bar_args))
 
@@ -249,3 +251,64 @@ def plot_csvs_relative(files: Dict[str, typing.Union[Path, Iterable[Path]]],
         )
 
     return fig, bar_results
+
+
+def _first_upper(s: str):
+    return s[:1].upper() + s[1:]
+
+
+# interesting["faster"] = latex_df[latex_df['cycles'] < 1.0]
+def _latex_define_macro(prefix, name, value):
+    assert isinstance(value, str)
+    fullname = _first_upper(prefix) + _first_upper(name)  # camelcase
+    print(fullname, "=", value)
+    return "\\newcommand*{\\" + str(fullname) + "}{" + str(value) + "}\n"
+
+
+def _latex_bench_overhead_macro(prefix, metric: str, name: str, value: float):
+    assert isinstance(value, float)
+    if value < 0.0:
+        suffix = "Faster"
+        value = "{:.1f}\\%".format(-(value * 100.0))
+    else:
+        suffix = "Overhead"
+        value = "{:.1f}\\%".format(value * 100.0)
+    return _latex_define_macro(prefix, _first_upper(name) + _first_upper(metric) + suffix, value)
+
+
+def generate_latex_macros(f: Union[typing.IO, Path], data: List[BarResults], prefix: str, metrics: List[str]=None) -> None:
+    if isinstance(f, Path):
+        with f.open("w") as opened:
+            return generate_latex_macros(opened, data, prefix, metrics)
+
+    if metrics is None:
+        metrics = ["cycles"]
+
+    from scipy.stats.mstats import gmean
+
+    for results in data:
+        metric = results.raw_metric
+        if metric not in metrics:
+            continue
+        # First write the overall values:
+        medians = results.medians  # type: Iterable[float]
+        print(medians)
+        f.write(_latex_bench_overhead_macro(prefix, metric, "Min", np.min(results.medians)))
+        f.write(_latex_bench_overhead_macro(prefix, metric, "Median", np.median(results.medians)))
+        f.write(_latex_bench_overhead_macro(prefix, metric, "Mean", np.mean(results.medians)))
+        # For geomean we need values > 1:
+
+        f.write(_latex_bench_overhead_macro(prefix, metric, "Geomean", gmean([x + 1 for x in results.medians]) - 1))
+
+        # For the worst case also write the benchmark name:
+        worst = max(results.benchmark_data, key=operator.attrgetter("median"))
+        assert worst.median == np.max(results.medians)
+        f.write(_latex_bench_overhead_macro(prefix, metric, "Max", np.max(results.medians)))
+        f.write(_latex_define_macro(prefix, "Max" + _first_upper(metric) + "Benchmark", str(worst.program)))
+
+        for b in results.benchmark_data:
+            # Try to remove all chars that aren't valid in a latex macro name:
+            progname_escaped = b.program
+            progname_escaped = progname_escaped.replace("-", "").replace(" ", "").replace(".", "").lower()
+            progname_escaped = ''.join([i for i in progname_escaped if not i.isdigit()])
+            f.write(_latex_bench_overhead_macro(prefix, metric, progname_escaped, b.median))
