@@ -132,8 +132,13 @@ class BarResults:
         if error_y is None:
             error_y = go.bar.ErrorY()
         error_y.update(data_args)
+        # Some default arguments:
         if error_y.thickness is None:
             error_y.thickness = 1
+        # FIXME: should report as bug upstream
+        # Smaller error bars if there are more than 10 benchmarks:
+        if error_y.width is None and len(self.benchmark_data) > 10:
+            error_y.width = 2
         return error_y
 
     def create_bar(self, text_in_bar: bool, error_bar_args: go.bar.ErrorY):
