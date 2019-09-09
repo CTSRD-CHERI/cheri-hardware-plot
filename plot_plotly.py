@@ -9,55 +9,6 @@ import functools
 from pathlib import Path
 
 
-# We want to use IQRs for benchmarks
-# Dived all values in the relative samples by the median of the baseline
-def std_norm(base_samples, test_samples):
-    if len(base_samples) == 0 or len(test_samples) == 0:
-        print("base:", base_samples)
-        print("test:", test_samples, flush=True)
-        raise RuntimeError("EMPTY SAMPLES INPUT?")
-    test_norm = test_samples / np.median(base_samples)
-    # It seems like we get ZERO l2cache missing in the bzip benchmark:
-    if any(np.isnan(x) for x in test_norm):
-        print("base:", base_samples)
-        print("test:", test_samples, flush=True)
-        print("base median: ", np.median(base_samples))
-        print("test_norm =", test_norm, flush=True)
-        raise RuntimeError("GOT NAN IN TEST_NORM: ", test_norm)
-    # per https://stackoverflow.com/questions/23228244/how-do-you-find-the-iqr-in-numpy
-    # iqr = np.subtract(*np.percentile(test_norm, [75, 25]))
-    q75 = np.percentile(test_norm, 75)
-    q25 = np.percentile(test_norm, 25)
-    med = np.median(test_norm)
-    return np.median(test_norm), med - q25, q75 - med
-
-
-def _old(df):
-    # HACK: work around "Function names must be unique, found multiple named percentile " error
-    # Seems like functools.partial won't work...
-    def _p75(x):
-        return np.percentile(x, 75)
-
-    def _p25(x):
-        return np.percentile(x, 25)
-
-    # agg_dict = dict()
-    # for metric in metrics:
-    #     agg_dict["min_" + metric] = pd.NamedAgg(column=metric, aggfunc='min')
-    #     agg_dict["max_" + metric] = pd.NamedAgg(column=metric, aggfunc='max')
-    #     agg_dict["mean_" + metric] = pd.NamedAgg(column=metric, aggfunc=np.mean)
-    #     agg_dict["median_" + metric] = pd.NamedAgg(column=metric, aggfunc=np.median)
-    #     # agg_dict["p75_" + metric] = pd.NamedAgg(column=metric, aggfunc=functools.partial(np.percentile, q=75))
-    #     # agg_dict["p25_" + metric] = pd.NamedAgg(column=metric, aggfunc=functools.partial(np.percentile, q=25))
-    #     agg_dict["p75_" + metric] = pd.NamedAgg(column=metric, aggfunc=p75)
-    #     agg_dict["p25_" + metric] = pd.NamedAgg(column=metric, aggfunc=p25)
-    # grouped_df = norm_df.groupby("target-arch-cpu").agg(**agg_dict)  # Note: must unpack dict otherwise we get an error
-    # print(grouped_df)
-    # grouped_df = grouped_df.sub(1)
-    # df = grouped_df
-    pass
-
-
 def _normalize_values(row: pd.Series, baseline_medians: pd.DataFrame):
     progname = str(row.progname)
     for k, v in row.iteritems():
