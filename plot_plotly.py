@@ -195,13 +195,14 @@ def plot_csvs_relative(files: Dict[str, typing.Union[Path, Iterable[Path]]],
     fig = go.Figure()
     bar_results = []
     all_programs = set()
-    for name, csv in files.items():
-        orig_df = _load_statcounters_csv(csv, metrics)
-        # Normalize by basline median
-        df = orig_df.apply(_normalize_values, axis=1, args=(baseline_medians,))  # type: pd.DataFrame
-        # df["variant"] = name
-        grouped = df.groupby("progname")
-        for metric in metrics:
+    # First by metric, then by configuration (ensures that e.g. cycles are consecutive and can be compared easily)
+    for metric in metrics:
+        for name, csv in files.items():
+            orig_df = _load_statcounters_csv(csv, metrics)
+            # Normalize by basline median
+            df = orig_df.apply(_normalize_values, axis=1, args=(baseline_medians,))  # type: pd.DataFrame
+            # df["variant"] = name
+            grouped = df.groupby("progname")
             data = dict()
             for progname, group in grouped:
                 all_programs.add(progname)
