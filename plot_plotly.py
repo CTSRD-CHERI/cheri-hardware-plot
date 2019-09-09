@@ -31,6 +31,27 @@ def _load_statcounters_csv(csv: Union[Path, Iterable[Path]], metrics: List[str])
     return df[["progname"] + metrics]
 
 
+def progname_mapping_olden(n):
+    return {
+        "treeadd 21 10 0": "treeadd",
+        "perimeter 10 0": "perimeter",
+        "mst 1024 0": "mst",
+        "bisort 250000 0": "bisort",
+        "bisort 250000 0_alloc": "bisort (alloc)",
+        "bisort 250000 0_exec": "bisort (exec)",
+        "treeadd 21 10 0_alloc": "treeadd (alloc)",
+        "treeadd 21 10 0_exec": "treeadd (exec)",
+        "perimeter 10 0_alloc": "perimeter (alloc)",
+        "perimeter 10 0_exec": "perimeter (exec)",
+        "mst 1024 0_alloc": "mst (alloc)",
+        "mst 1024 0_exec": "mst (exec)"
+    }.get(n, n)
+
+
+def progname_mapping_mibench(name):
+    return name.replace("automotive-", "auto-").replace("-encode", "-enc").replace("-decode", "-dec")
+
+
 def generate_hardware_results_csv(files: Dict[str, typing.Union[Path, Iterable[Path]]], output_file: Path,
                                   progname_mapping: Callable[[str], str] = None):
     dfs = []
