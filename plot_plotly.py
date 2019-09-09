@@ -80,7 +80,8 @@ def _load_statcounters_csv(csv: Union[Path, Iterable[Path]], metrics: List[str])
     return df[["progname"] + metrics]
 
 
-def generate_hardware_results_csv(files: Dict[str, typing.Union[Path, Iterable[Path]]], output_file: Path):
+def generate_hardware_results_csv(files: Dict[str, typing.Union[Path, Iterable[Path]]], output_file: Path,
+                                  progname_mapping: Callable[[str], str] = None):
     dfs = []
     for k, v in files.items():
         df = _load_statcounters_csv(v, metrics=None)
@@ -93,6 +94,8 @@ def generate_hardware_results_csv(files: Dict[str, typing.Union[Path, Iterable[P
         del df['archname']
         dfs.append(df)
     df = pd.concat(dfs)
+    if progname_mapping is not None:
+        df["progname"] = df["progname"].apply(progname_mapping)
     df.sort_values(["bitfile-cpu", "sdk-cpu", "target-arch-cpu", "table-struct", "progname"], inplace=True)
     df.to_csv(str(output_file))
 
