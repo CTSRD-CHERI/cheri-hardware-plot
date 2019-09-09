@@ -85,15 +85,54 @@ def _default_progname_mapping(n):
     return n
 
 
+class _RelativeBenchmarkData:
+    def __init__(self, values: pd.Series, metric: str, program: str):
+        self.program = program
+        self.metric = metric
+        self.values = values
+        # self.data = data
+        # subtract one to get a relative overhead
+        self.median = np.median(values) - 1
+        self.p75 = np.percentile(values, 75) - 1
+        self.p25 = np.percentile(values, 25) - 1
+
+
+class BarResults:
+    def __init__(self, data: Mapping[str, pd.Series], metric: str):
+        self.benchmark_data = []
+        self.metric = metric
+        for k, v in data.items():
+            self.benchmark_data.append(_RelativeBenchmarkData(v, metric, k))
+        self.medians = np.array([x.median for x in self.benchmark_data])
+        self.p75s = np.array([x.p75 for x in self.benchmark_data])
+        self.p25s = np.array([x.p25 for x in self.benchmark_data])
+
+    def error_bars(self):
+        return dict(type='data', symmetric=False, array=self.p75s - self.medians,
+                    arrayminus=self.medians - self.p25s)
+
+    def create_bar(self):
+        return go.Bar(
+            name=self.metric,
+            x=[x.program for x in self.benchmark_data],
+            y=self.medians,
+            error_y=self.error_bars(),
+            text=["{0:.2f}%".format(x * 100) for x in self.medians],
+            textfont=dict(size=18),
+            textposition='auto',
+        )
+
+
 def plot_csvs_relative(files: Dict[str, Path], baseline: Path, *, label: str = "Relative overhead compared to baseline",
                        metrics: List[str]=None, metric_mapping: Callable[[str], str] = _default_metric_mapping,
                        progname_mapping: Callable[[str], str] = _default_progname_mapping,
-                       legend_inside=True) -> go.Figure:
+                       legend_inside=True) -> Tuple[go.Figure, List[BarResults]]:
     if metrics is None:
         metrics = ["cycles", "instructions", "l2cache_misses"]
     baseline_df = _load_statcounters_csv(baseline, metrics)
     baseline_medians = baseline_df.groupby("progname").median()
     fig = go.Figure()
+    bar_results = []
     for name, csv in files.items():
         orig_df = _load_statcounters_csv(csv, metrics)
         # Normalize by basline median
@@ -105,6 +144,7 @@ def plot_csvs_relative(files: Dict[str, Path], baseline: Path, *, label: str = "
             for progname, group in grouped:
                 data[progname_mapping(progname)] = group[metric]
             result = BarResults(data, metric_mapping(metric))
+            bar_results.append(result)
             fig.add_trace(result.create_bar())
 
     yaxis = go.layout.YAxis(title=dict(text=label, font=dict(size=18)))
@@ -140,34 +180,4 @@ def plot_csvs_relative(files: Dict[str, Path], baseline: Path, *, label: str = "
             )
         )
 
-    return fig
-
-
-class BarResults:
-    def __init__(self, data: Mapping[str, pd.Series], metric: str):
-        self.programs = list(data.keys())
-        self.metric = metric
-        s = list(data.values())
-        # self.data = data
-        # subtract one to get a relative overhead
-        self.medians = np.array([np.median(x) - 1 for x in s])
-        self.p75s = np.array([np.percentile(x, 75) - 1 for x in s])
-        self.p25s = np.array([np.percentile(x, 25) - 1 for x in s])
-        errup = self.p75s - self.medians
-        errdown = self.medians - self.p25s
-        print(errup, errdown)
-
-    def error_bars(self):
-        return dict(type='data', symmetric=False, array=self.p75s - self.medians,
-                    arrayminus=self.medians - self.p25s)
-
-    def create_bar(self):
-        return go.Bar(
-            name=self.metric,
-            x=self.programs,
-            y=self.medians,
-            error_y=self.error_bars(),
-            text=["{0:.2f}%".format(x * 100) for x in self.medians],
-            textfont=dict(size=18),
-            textposition='auto',
-        )
+    return fig, bar_results
