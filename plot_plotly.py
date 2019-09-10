@@ -248,8 +248,20 @@ def _first_upper(s: str):
 def _latex_define_macro(prefix, name, value):
     assert isinstance(value, str)
     fullname = _first_upper(prefix) + _first_upper(name)  # camelcase
+    chars = []
     # Try to remove all chars that aren't valid in a latex macro name:
-    fullname = ''.join([i for i in fullname if i.isalpha()])
+    next_upper = False
+    for c in fullname:
+        if c in ("-", " ", "\t", "_"):
+            next_upper = True
+            continue
+        if c.isalpha():
+            if next_upper:
+                chars.append(c.upper())
+                next_upper = False
+            else:
+                chars.append(c)
+    fullname = ''.join(chars)
     print(fullname, "=", value)
     return "\\newcommand*{\\" + str(fullname) + "}{" + str(value) + "}\n"
 
@@ -276,9 +288,10 @@ def generate_latex_macros(f: Union[typing.IO, Path], data: List[BarResults], pre
     from scipy.stats.mstats import gmean
 
     for results in data:
-        metric = results.raw_metric
-        if metric not in metrics:
+        if results.raw_metric not in metrics:
             continue
+        metric = results.human_metric
+        f.write("% START " + results.human_metric + "\n")
         # First write the overall values:
         medians = results.medians  # type: Iterable[float]
         print(medians)
@@ -294,6 +307,7 @@ def generate_latex_macros(f: Union[typing.IO, Path], data: List[BarResults], pre
         assert worst.median == np.max(results.medians)
         f.write(_latex_bench_overhead_macro(prefix, metric, "Max", np.max(results.medians)))
         f.write(_latex_define_macro(prefix, "Max" + _first_upper(metric) + "Benchmark", str(worst.program)))
-
+        f.write("% Per-benchmark " + results.human_metric + "\n")
         for b in results.benchmark_data:
             f.write(_latex_bench_overhead_macro(prefix, metric, b.program.lower(), b.median))
+        f.write("% END " + results.human_metric + "\n\n")
