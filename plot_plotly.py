@@ -145,6 +145,17 @@ class BarResults:
         return x
 
 
+def reduce_saturation(colour, howmuch):
+    #from matplotlib.colors import to_rgb, rgb_to_hsv, hsv_to_rgb, to_hex
+    import matplotlib.colors
+    # create a less saturated version of the colour:
+    rgb = matplotlib.colors.to_rgb(colour)
+    hsv = matplotlib.colors.rgb_to_hsv(rgb)
+    hsv[1] -= howmuch
+    result = matplotlib.colors.to_hex(matplotlib.colors.hsv_to_rgb(hsv))
+    return result
+
+
 def plot_csvs_relative(files: Dict[str, typing.Union[Path, Iterable[Path]]],
                        baseline: typing.Union[Path, Iterable[Path]], *,
                        label: str = "Relative overhead compared to baseline",
