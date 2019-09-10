@@ -129,8 +129,9 @@ class BarResults:
             error_y.width = 2
         return error_y
 
-    def create_bar(self, text_in_bar: bool, error_bar_args: go.bar.ErrorY):
-        return go.Bar(
+    def create_bar(self, text_in_bar: bool, error_bar_args: go.bar.ErrorY,
+                   customize_bar: Callable[["BarResults", go.Bar], go.Bar] = None):
+        x = go.Bar(
             name=self.human_metric,
             x=[x.program for x in self.benchmark_data],
             y=self.medians,
@@ -139,6 +140,9 @@ class BarResults:
             # textfont=dict(size=18),
             textposition='auto',
         )
+        if customize_bar is not None:
+            x = customize_bar(self, x)
+        return x
 
 
 def plot_csvs_relative(files: Dict[str, typing.Union[Path, Iterable[Path]]],
@@ -147,6 +151,7 @@ def plot_csvs_relative(files: Dict[str, typing.Union[Path, Iterable[Path]]],
                        metrics: List[str] = None, metric_mapping: Callable[[str, str], str] = _default_metric_mapping,
                        progname_mapping: Callable[[str], str] = _default_progname_mapping,
                        legend_inside=True, include_variant_in_legend=False, text_in_bar=True, tick_angle: float = None,
+                       customize_bar: Callable[["BarResults", go.Bar], go.Bar] = None,
                        error_bar_args: go.bar.ErrorY = None) -> Tuple[go.Figure, List[BarResults]]:
     if metrics is None:
         metrics = ["cycles", "instructions", "l2cache_misses"]
@@ -173,7 +178,8 @@ def plot_csvs_relative(files: Dict[str, typing.Union[Path, Iterable[Path]]],
                 data[progname_mapping(progname)] = group[metric]
             result = BarResults(data, metric_mapping(metric, name), raw_metric=metric)
             bar_results.append(result)
-            fig.add_trace(result.create_bar(text_in_bar=text_in_bar, error_bar_args=error_bar_args))
+            fig.add_trace(
+                result.create_bar(text_in_bar=text_in_bar, error_bar_args=error_bar_args, customize_bar=customize_bar))
 
     yaxis = go.layout.YAxis(title=dict(text=label, font=dict(size=18)))
     yaxis.tickformat = ',.0%'  # percentage with 0 fractional digits
@@ -202,7 +208,6 @@ def plot_csvs_relative(files: Dict[str, typing.Union[Path, Iterable[Path]]],
             )
             print("Adding shaded background from", s.x0, "to", s.x1)
             shapes.append(s)
-
 
     fig.update_layout(
         barmode='group',
@@ -277,7 +282,8 @@ def _latex_bench_overhead_macro(prefix, metric: str, name: str, value: float):
     return _latex_define_macro(prefix, _first_upper(name) + _first_upper(metric) + suffix, value)
 
 
-def generate_latex_macros(f: Union[typing.IO, Path], data: List[BarResults], prefix: str, metrics: List[str]=None) -> None:
+def generate_latex_macros(f: Union[typing.IO, Path], data: List[BarResults], prefix: str,
+                          metrics: List[str] = None) -> None:
     if isinstance(f, Path):
         with f.open("w") as opened:
             return generate_latex_macros(opened, data, prefix, metrics)
