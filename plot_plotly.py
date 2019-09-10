@@ -184,6 +184,7 @@ def plot_csvs_relative(files: Dict[str, typing.Union[Path, Iterable[Path]]],
                        progname_mapping: Callable[[str], str] = _default_progname_mapping,
                        legend_inside=True, include_variant_in_legend=False, text_in_bar=True, tick_angle: float = None,
                        customize_bar: Callable[["BarResults", go.Bar], go.Bar] = None,
+                       include_progname_filter: Callable[[str], bool] = None,
                        add_summary_bars=None,
                        error_bar_args: go.bar.ErrorY = None) -> Tuple[go.Figure, List[BarResults]]:
     if add_summary_bars is None:
@@ -209,6 +210,9 @@ def plot_csvs_relative(files: Dict[str, typing.Union[Path, Iterable[Path]]],
             grouped = df.groupby("progname")
             data = dict()
             for progname, group in grouped:
+                if include_progname_filter is not None and not include_progname_filter(progname):
+                    print("Skipping program", progname)
+                    continue
                 all_programs.add(progname)
                 data[progname_mapping(progname)] = group[metric]
             result = BarResults(data, metric_mapping(metric, name), raw_metric=metric)
