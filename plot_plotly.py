@@ -293,7 +293,7 @@ def _latex_define_macro(prefix, name, value):
     # Try to remove all chars that aren't valid in a latex macro name:
     next_upper = False
     for c in fullname:
-        if c in ("-", " ", "\t", "_"):
+        if c in ("-", " ", "\t", "_", "."):
             next_upper = True
             continue
         if c.isalpha():
