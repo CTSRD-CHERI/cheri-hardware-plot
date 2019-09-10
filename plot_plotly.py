@@ -187,7 +187,7 @@ def plot_csvs_relative(files: Dict[str, typing.Union[Path, Iterable[Path]]],
                        add_summary_bars=None,
                        error_bar_args: go.bar.ErrorY = None) -> Tuple[go.Figure, List[BarResults]]:
     if add_summary_bars is None:
-        add_summary_bars = []
+        add_summary_bars = [SummaryBar.ArithmeticMean]
     if metrics is None:
         metrics = ["cycles", "instructions", "l2cache_misses"]
     # Add support for metric + variant mapping
