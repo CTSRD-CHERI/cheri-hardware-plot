@@ -1,11 +1,13 @@
 from pathlib import Path
 from typing import *
+from enum import Enum
 import plotly.graph_objects as go
 import pandas as pd
 import numpy as np
 import typing
 import operator
 import functools
+from scipy.stats.mstats import gmean
 from pathlib import Path
 
 
@@ -91,6 +93,17 @@ def _default_progname_mapping(n):
     return n
 
 
+class SummaryBar(Enum):
+    ArithmeticMean = ("arith. mean", np.mean)
+    # For geomean all values must be greater 1:
+    GeometricMean = ("geom. mean", lambda overheads: gmean([x + 1 for x in overheads]) - 1)
+    Median = ("median", np.median)
+
+    def __init__(self, label: str, func: Callable[[Iterable[float]], float]):
+        self.label = label
+        self.func = func
+
+
 class _RelativeBenchmarkData:
     def __init__(self, values: pd.Series, metric: str, program: str):
         self.program = program
@@ -130,13 +143,21 @@ class BarResults:
         return error_y
 
     def create_bar(self, text_in_bar: bool, error_bar_args: go.bar.ErrorY,
-                   customize_bar: Callable[["BarResults", go.Bar], go.Bar] = None):
+                   add_summary_bars: List[SummaryBar], customize_bar: Callable[["BarResults", go.Bar], go.Bar] = None):
+        extra_bars = dict()
+        x_values = [x.program for x in self.benchmark_data]
+        y_values = list(self.medians.tolist())
+        for bar in add_summary_bars:
+            print("ADDING", bar.label, bar.func(self.medians))
+            x_values.append(bar.label)
+            y_values.append(bar.func(self.medians))
+            # Note: no error bar here!
+
         x = go.Bar(
             name=self.human_metric,
-            x=[x.program for x in self.benchmark_data],
-            y=self.medians,
+            x=x_values, y=y_values,
             error_y=self.error_bars(error_bar_args),
-            text=["{0:.2f}%".format(x * 100) for x in self.medians] if text_in_bar else None,
+            text=["{0:.2f}%".format(x * 100) for x in y_values] if text_in_bar else None,
             # textfont=dict(size=18),
             textposition='auto',
         )
@@ -146,7 +167,7 @@ class BarResults:
 
 
 def reduce_saturation(colour, howmuch):
-    #from matplotlib.colors import to_rgb, rgb_to_hsv, hsv_to_rgb, to_hex
+    # from matplotlib.colors import to_rgb, rgb_to_hsv, hsv_to_rgb, to_hex
     import matplotlib.colors
     # create a less saturated version of the colour:
     rgb = matplotlib.colors.to_rgb(colour)
@@ -163,7 +184,10 @@ def plot_csvs_relative(files: Dict[str, typing.Union[Path, Iterable[Path]]],
                        progname_mapping: Callable[[str], str] = _default_progname_mapping,
                        legend_inside=True, include_variant_in_legend=False, text_in_bar=True, tick_angle: float = None,
                        customize_bar: Callable[["BarResults", go.Bar], go.Bar] = None,
+                       add_summary_bars=None,
                        error_bar_args: go.bar.ErrorY = None) -> Tuple[go.Figure, List[BarResults]]:
+    if add_summary_bars is None:
+        add_summary_bars = []
     if metrics is None:
         metrics = ["cycles", "instructions", "l2cache_misses"]
     # Add support for metric + variant mapping
@@ -190,14 +214,15 @@ def plot_csvs_relative(files: Dict[str, typing.Union[Path, Iterable[Path]]],
             result = BarResults(data, metric_mapping(metric, name), raw_metric=metric)
             bar_results.append(result)
             fig.add_trace(
-                result.create_bar(text_in_bar=text_in_bar, error_bar_args=error_bar_args, customize_bar=customize_bar))
+                result.create_bar(text_in_bar=text_in_bar, error_bar_args=error_bar_args, customize_bar=customize_bar,
+                                  add_summary_bars=add_summary_bars))
 
     yaxis = go.layout.YAxis(title=dict(text=label, font=dict(size=18)))
     yaxis.tickformat = ',.0%'  # percentage with 0 fractional digits
 
     # Add alternating shading:
     shapes = []  # type: List[go.layout.Shape]
-    num_bars = len(all_programs)
+    num_bars = len(all_programs) + len(add_summary_bars)
     for i in range(0, num_bars):
         if (i % 2) == 1:
             # insert a shaded background for this bar
@@ -225,7 +250,7 @@ def plot_csvs_relative(files: Dict[str, typing.Union[Path, Iterable[Path]]],
         yaxis=yaxis, shapes=shapes,
         showlegend=True,
     )
-    fig.update_yaxes(automargin=True)
+    fig.update_yaxes(automargin=True, hoverformat=".2%")
     fig.update_xaxes(automargin=True)
     if tick_angle:
         fig.update_xaxes(tickangle=tick_angle)
@@ -302,8 +327,6 @@ def generate_latex_macros(f: Union[typing.IO, Path], data: List[BarResults], pre
     if metrics is None:
         metrics = ["cycles"]
 
-    from scipy.stats.mstats import gmean
-
     for results in data:
         if results.raw_metric not in metrics:
             continue
@@ -311,12 +334,10 @@ def generate_latex_macros(f: Union[typing.IO, Path], data: List[BarResults], pre
         f.write("% START " + results.human_metric + "\n")
         # First write the overall values:
         medians = results.medians  # type: Iterable[float]
-        print(medians)
         f.write(_latex_bench_overhead_macro(prefix, metric, "Min", np.min(results.medians)))
         f.write(_latex_bench_overhead_macro(prefix, metric, "Median", np.median(results.medians)))
         f.write(_latex_bench_overhead_macro(prefix, metric, "Mean", np.mean(results.medians)))
         # For geomean we need values > 1:
-
         f.write(_latex_bench_overhead_macro(prefix, metric, "Geomean", gmean([x + 1 for x in results.medians]) - 1))
 
         # For the worst case also write the benchmark name:
