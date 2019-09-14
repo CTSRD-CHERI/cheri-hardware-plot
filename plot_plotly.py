@@ -19,7 +19,8 @@ def _normalize_values(row: pd.Series, baseline_medians: pd.DataFrame):
     return row
 
 
-def _load_statcounters_csv(csv: Union[Path, Iterable[Path]], metrics: List[str]) -> pd.DataFrame:
+def _load_statcounters_csv(csv: Union[Path, Iterable[Path]], metrics: List[str],
+                           preprocess_data: Callable[["pd.DataFrame", str], pd.DataFrame], name: str) -> pd.DataFrame:
     if isinstance(csv, Path):
         df = pd.read_csv(csv)
     else:
@@ -30,6 +31,8 @@ def _load_statcounters_csv(csv: Union[Path, Iterable[Path]], metrics: List[str])
 
     if metrics is None:
         return df
+    if preprocess_data is not None:
+        df = preprocess_data(df, name)
     return df[["progname"] + metrics]
 
 
@@ -184,6 +187,7 @@ def plot_csvs_relative(files: Dict[str, typing.Union[Path, Iterable[Path]]],
                        progname_mapping: Callable[[str], str] = _default_progname_mapping,
                        legend_inside=True, include_variant_in_legend=False, text_in_bar=True, tick_angle: float = None,
                        customize_bar: Callable[["BarResults", go.Bar], go.Bar] = None,
+                       preprocess_data: Callable[["pd.DataFrame", str], pd.DataFrame] = None,
                        include_progname_filter: Callable[[str], bool] = None,
                        add_summary_bars=None,
                        error_bar_args: go.bar.ErrorY = None) -> Tuple[go.Figure, List[BarResults]]:
@@ -195,7 +199,7 @@ def plot_csvs_relative(files: Dict[str, typing.Union[Path, Iterable[Path]]],
     if metric_mapping is _default_metric_mapping and include_variant_in_legend:
         metric_mapping = _default_metric_mapping_with_variant
 
-    baseline_df = _load_statcounters_csv(baseline, metrics)
+    baseline_df = _load_statcounters_csv(baseline, metrics, preprocess_data, "baseline")
     baseline_medians = baseline_df.groupby("progname").median()
     fig = go.Figure()
     bar_results = []
@@ -203,7 +207,7 @@ def plot_csvs_relative(files: Dict[str, typing.Union[Path, Iterable[Path]]],
     # First by metric, then by configuration (ensures that e.g. cycles are consecutive and can be compared easily)
     for metric in metrics:
         for name, csv in files.items():
-            orig_df = _load_statcounters_csv(csv, metrics)
+            orig_df = _load_statcounters_csv(csv, metrics, preprocess_data, name)
             # Normalize by basline median
             df = orig_df.apply(_normalize_values, axis=1, args=(baseline_medians,))  # type: pd.DataFrame
             # df["variant"] = name
