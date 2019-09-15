@@ -19,8 +19,8 @@ def _normalize_values(row: pd.Series, baseline_medians: pd.DataFrame):
     return row
 
 
-def _load_statcounters_csv(csv: Union[Path, Iterable[Path]], metrics: List[str],
-                           preprocess_data: Callable[["pd.DataFrame", str], pd.DataFrame], name: str) -> pd.DataFrame:
+def _load_statcounters_csv(csv: Union[Path, Iterable[Path]], metrics: Optional[List[str]],
+                           preprocess_data: Optional[Callable[["pd.DataFrame", str], pd.DataFrame]], name: str) -> pd.DataFrame:
     if isinstance(csv, Path):
         df = pd.read_csv(csv)
     else:
@@ -61,7 +61,7 @@ def generate_hardware_results_csv(files: Dict[str, typing.Union[Path, Iterable[P
                                   progname_mapping: Callable[[str], str] = None):
     dfs = []
     for k, v in files.items():
-        df = _load_statcounters_csv(v, metrics=None)
+        df = _load_statcounters_csv(v, metrics=None, preprocess_data=None, name="hwresults")
         df.insert(0, 'target-arch-cpu', k)
         # old analysis script expects these values
         df.insert(0, 'sdk-cpu', "cheri128")
