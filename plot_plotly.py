@@ -26,8 +26,59 @@ def _load_statcounters_csv(csv: Union[Path, Iterable[Path]], metrics: Optional[L
     else:
         assert len(csv) > 0
         df = pd.concat(pd.read_csv(c) for c in csv)
-    # add l2cache_misses stat
-    df = df.assign(l2cache_misses=lambda x: x.l2cache_read_miss + x.l2cache_write_miss)
+
+    # From the original plotting script (but hopefully faster than the lambda version
+    df["cpi"] = df.cycles / df.instructions
+    df["tlb_miss"] = df.itlb_miss + df.dtlb_miss
+    df["tlb_inst_share"] = (df.tlb_miss * 50) / df.instructions
+
+    # FIXME: hardcoded CAP SIZE
+    CAP_SIZE = 16
+
+    df = df.assign(cap_bytes_read = df.apply(lambda x: CAP_SIZE * x['mipsmem_cap_read'], axis=1))
+    df = df.assign(mem_bytes_read = lambda x: x.mipsmem_byte_read + 2*x.mipsmem_hword_read + 4*x.mipsmem_word_read + 8*x.mipsmem_dword_read + x.cap_bytes_read)
+    df = df.assign(cap_bytes_write = df.apply(lambda x: CAP_SIZE*x['mipsmem_cap_write'], axis=1))
+    df = df.assign(mem_bytes_write = lambda x: x.mipsmem_byte_write + 2*x.mipsmem_hword_write + 4*x.mipsmem_word_write + 8*x.mipsmem_dword_write + x.cap_bytes_write)
+    df["mem_bytes"] = df.mem_bytes_read + df.mem_bytes_write
+
+    df["icache_misses"] = df.icache_read_miss + df.icache_write_miss
+    df["icache_hits"] = df.icache_read_hit + df.icache_write_hit
+    df["icache_accesses"] = df.icache_misses + df.icache_hits
+    df["icache_read_miss_rate"] = df.icache_read_miss / (df.icache_read_hit+df.icache_read_miss)
+    df["icache_read_hit_rate"] = df.icache_read_hit / (df.icache_read_hit+df.icache_read_miss)
+
+    df["dcache_misses"] = df.dcache_read_miss + df.dcache_write_miss
+    df["dcache_hits"] = df.dcache_read_hit + df.dcache_write_hit
+    df["dcache_accesses"] = df.dcache_misses + df.dcache_hits
+    df["dcache_read_miss_rate"] = df.dcache_read_miss / (df.dcache_read_hit+df.dcache_read_miss)
+    df["dcache_read_hit_rate"] = df.dcache_read_hit / (df.dcache_read_hit+df.dcache_read_miss)
+
+    df["l2cache_misses"] = df.l2cache_read_miss + df.l2cache_write_miss
+    df["l2cache_hits"] = df.l2cache_read_hit + df.l2cache_write_hit
+    df["l2cache_accesses"] = df.l2cache_misses + df.l2cache_hits
+    df["l2cache_read_miss_rate"] = df.l2cache_read_miss / (df.l2cache_read_hit+df.l2cache_read_miss)
+    df["l2cache_read_hit_rate"] = df.l2cache_read_hit / (df.l2cache_read_hit+df.l2cache_read_miss)
+
+    df["l2cache_req_flits"] = df.l2cachemaster_read_req + df.l2cachemaster_write_req_flit
+    df["l2cache_rsp_flits"] = df.l2cachemaster_read_rsp_flit + df.l2cachemaster_write_rsp
+    df["l2cache_flits"] = df.l2cache_req_flits + df.l2cache_rsp_flits
+
+    df["tagcache_req_flits"] = df.tagcachemaster_read_req + df.tagcachemaster_write_req_flit
+    df["tagcache_rsp_flits"] = df.tagcachemaster_read_rsp_flit + df.tagcachemaster_write_rsp
+    df["tagcache_flits"] = df.tagcache_req_flits + df.tagcache_rsp_flits
+
+    df = df.assign(dram_req_flits = df[['l2cache_req_flits','tagcache_req_flits']].max(axis='columns'))
+    df = df.assign(dram_rsp_flits = df[['l2cache_rsp_flits','tagcache_rsp_flits']].max(axis='columns'))
+    df["dram_flits"] = df.dram_req_flits + df.dram_rsp_flits
+
+    df["tags_req_flits"] = df.dram_req_flits - df.l2cache_req_flits
+    df["tags_rsp_flits"] = df.dram_rsp_flits - df.l2cache_rsp_flits
+    df["tags_flits"] = df.tags_req_flits + df.tags_rsp_flits
+
+    df["tags_dram_overhead"] = df.tags_flits / df.dram_flits
+    df = df.assign(dram_mpki = lambda x: x.dram_req_flits / (x.instructions/1000))
+    df = df.assign(tags_dram_mpki = lambda x: x.tags_req_flits / (x.instructions/1000))
+    df["dram_inst_share"] = df.dram_flits / df.instructions
 
     if metrics is None:
         return df
