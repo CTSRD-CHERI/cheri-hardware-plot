@@ -136,6 +136,8 @@ def _default_metric_mapping(m: str, variant: str):
         "inst_kernel": "Instructions (kernel)",
         "l2cache_misses": "L2-cache misses",
         "l2cache_flits": "L2-cache flits",
+        "dram_req_flits": "DRAM requests",
+        "dram_flits": "DRAM flits",
     }.get(m, m)
 
 
