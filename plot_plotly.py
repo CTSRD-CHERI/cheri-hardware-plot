@@ -145,6 +145,10 @@ def _default_metric_mapping_with_variant(m: str, variant: str):
     return variant + " " + _default_metric_mapping(m, variant)
 
 
+def variant_only_metric_mapping(m: str, variant: str):
+    return variant
+
+
 def _default_progname_mapping(n):
     return n
 
