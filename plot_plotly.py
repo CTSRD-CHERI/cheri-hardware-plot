@@ -1,14 +1,13 @@
+import operator
+import typing
+from enum import Enum
 from pathlib import Path
 from typing import *
-from enum import Enum
-import plotly.graph_objects as go
-import pandas as pd
+
 import numpy as np
-import typing
-import operator
-import functools
+import pandas as pd
+import plotly.graph_objects as go
 from scipy.stats.mstats import gmean
-from pathlib import Path
 
 
 def _normalize_values(row: pd.Series, baseline_medians: pd.DataFrame):
@@ -19,45 +18,63 @@ def _normalize_values(row: pd.Series, baseline_medians: pd.DataFrame):
     return row
 
 
-def _load_statcounters_csv(csv: Union[Path, Iterable[Path]], metrics: Optional[List[str]],
-                           preprocess_data: Optional[Callable[["pd.DataFrame", str], pd.DataFrame]], name: str) -> pd.DataFrame:
-    if isinstance(csv, Path):
+def _load_statcounters_csv(csv: Union[Path, Iterable[Path], pd.DataFrame, Callable[[], pd.DataFrame]],
+                           metrics: Optional[List[str]],
+                           preprocess_data: Optional[Callable[["pd.DataFrame", str], pd.DataFrame]],
+                           name: str, include_additional_derived_props=True) -> pd.DataFrame:
+    if isinstance(csv, pd.DataFrame):
+        df = csv
+    elif isinstance(csv, Path):
         df = pd.read_csv(csv)
+    elif callable(csv):
+        df = csv()
     else:
         assert len(csv) > 0
         df = pd.concat(pd.read_csv(c) for c in csv)
+    if preprocess_data is not None:
+        df = preprocess_data(df, name)
+    # df.loc[:, "cpi"] = df['cycles'] / df['instructions']
+    if include_additional_derived_props:
+        df = add_more_derived_properties(df)
+    if metrics is None:
+        return df
+    return df[["progname"] + metrics]
 
-    # From the original plotting script (but hopefully faster than the lambda version
-    df["cpi"] = df.cycles / df.instructions
+
+def add_more_derived_properties(df: pd.DataFrame):
+    # From the original plotting script (but hopefully faster than the lambda version)
     df["tlb_miss"] = df.itlb_miss + df.dtlb_miss
     df["tlb_inst_share"] = (df.tlb_miss * 50) / df.instructions
 
     # FIXME: hardcoded CAP SIZE
     CAP_SIZE = 16
-
-    df = df.assign(cap_bytes_read = df.apply(lambda x: CAP_SIZE * x['mipsmem_cap_read'], axis=1))
-    df = df.assign(mem_bytes_read = lambda x: x.mipsmem_byte_read + 2*x.mipsmem_hword_read + 4*x.mipsmem_word_read + 8*x.mipsmem_dword_read + x.cap_bytes_read)
-    df = df.assign(cap_bytes_write = df.apply(lambda x: CAP_SIZE*x['mipsmem_cap_write'], axis=1))
-    df = df.assign(mem_bytes_write = lambda x: x.mipsmem_byte_write + 2*x.mipsmem_hword_write + 4*x.mipsmem_word_write + 8*x.mipsmem_dword_write + x.cap_bytes_write)
+    df = df.assign(cap_bytes_read=df.apply(lambda x: CAP_SIZE * x['mipsmem_cap_read'], axis=1))
+    df = df.assign(mem_bytes_read=lambda
+        x: x.mipsmem_byte_read + 2 * x.mipsmem_hword_read + 4 * x.mipsmem_word_read + 8 * x.mipsmem_dword_read +
+           x.cap_bytes_read)
+    df = df.assign(cap_bytes_write=df.apply(lambda x: CAP_SIZE * x['mipsmem_cap_write'], axis=1))
+    df = df.assign(mem_bytes_write=lambda
+        x: x.mipsmem_byte_write + 2 * x.mipsmem_hword_write + 4 * x.mipsmem_word_write + 8 * x.mipsmem_dword_write +
+           x.cap_bytes_write)
     df["mem_bytes"] = df.mem_bytes_read + df.mem_bytes_write
 
     df["icache_misses"] = df.icache_read_miss + df.icache_write_miss
     df["icache_hits"] = df.icache_read_hit + df.icache_write_hit
     df["icache_accesses"] = df.icache_misses + df.icache_hits
-    df["icache_read_miss_rate"] = df.icache_read_miss / (df.icache_read_hit+df.icache_read_miss)
-    df["icache_read_hit_rate"] = df.icache_read_hit / (df.icache_read_hit+df.icache_read_miss)
+    df["icache_read_miss_rate"] = df.icache_read_miss / (df.icache_read_hit + df.icache_read_miss)
+    df["icache_read_hit_rate"] = df.icache_read_hit / (df.icache_read_hit + df.icache_read_miss)
 
     df["dcache_misses"] = df.dcache_read_miss + df.dcache_write_miss
     df["dcache_hits"] = df.dcache_read_hit + df.dcache_write_hit
     df["dcache_accesses"] = df.dcache_misses + df.dcache_hits
-    df["dcache_read_miss_rate"] = df.dcache_read_miss / (df.dcache_read_hit+df.dcache_read_miss)
-    df["dcache_read_hit_rate"] = df.dcache_read_hit / (df.dcache_read_hit+df.dcache_read_miss)
+    df["dcache_read_miss_rate"] = df.dcache_read_miss / (df.dcache_read_hit + df.dcache_read_miss)
+    df["dcache_read_hit_rate"] = df.dcache_read_hit / (df.dcache_read_hit + df.dcache_read_miss)
 
     df["l2cache_misses"] = df.l2cache_read_miss + df.l2cache_write_miss
     df["l2cache_hits"] = df.l2cache_read_hit + df.l2cache_write_hit
     df["l2cache_accesses"] = df.l2cache_misses + df.l2cache_hits
-    df["l2cache_read_miss_rate"] = df.l2cache_read_miss / (df.l2cache_read_hit+df.l2cache_read_miss)
-    df["l2cache_read_hit_rate"] = df.l2cache_read_hit / (df.l2cache_read_hit+df.l2cache_read_miss)
+    df["l2cache_read_miss_rate"] = df.l2cache_read_miss / (df.l2cache_read_hit + df.l2cache_read_miss)
+    df["l2cache_read_hit_rate"] = df.l2cache_read_hit / (df.l2cache_read_hit + df.l2cache_read_miss)
 
     df["l2cache_req_flits"] = df.l2cachemaster_read_req + df.l2cachemaster_write_req_flit
     df["l2cache_rsp_flits"] = df.l2cachemaster_read_rsp_flit + df.l2cachemaster_write_rsp
@@ -67,8 +84,8 @@ def _load_statcounters_csv(csv: Union[Path, Iterable[Path]], metrics: Optional[L
     df["tagcache_rsp_flits"] = df.tagcachemaster_read_rsp_flit + df.tagcachemaster_write_rsp
     df["tagcache_flits"] = df.tagcache_req_flits + df.tagcache_rsp_flits
 
-    df = df.assign(dram_req_flits = df[['l2cache_req_flits','tagcache_req_flits']].max(axis='columns'))
-    df = df.assign(dram_rsp_flits = df[['l2cache_rsp_flits','tagcache_rsp_flits']].max(axis='columns'))
+    df = df.assign(dram_req_flits=df[['l2cache_req_flits', 'tagcache_req_flits']].max(axis='columns'))
+    df = df.assign(dram_rsp_flits=df[['l2cache_rsp_flits', 'tagcache_rsp_flits']].max(axis='columns'))
     df["dram_flits"] = df.dram_req_flits + df.dram_rsp_flits
 
     df["tags_req_flits"] = df.dram_req_flits - df.l2cache_req_flits
@@ -76,15 +93,10 @@ def _load_statcounters_csv(csv: Union[Path, Iterable[Path]], metrics: Optional[L
     df["tags_flits"] = df.tags_req_flits + df.tags_rsp_flits
 
     df["tags_dram_overhead"] = df.tags_flits / df.dram_flits
-    df = df.assign(dram_mpki = lambda x: x.dram_req_flits / (x.instructions/1000))
-    df = df.assign(tags_dram_mpki = lambda x: x.tags_req_flits / (x.instructions/1000))
+    df = df.assign(dram_mpki=lambda x: x.dram_req_flits / (x.instructions / 1000))
+    df = df.assign(tags_dram_mpki=lambda x: x.tags_req_flits / (x.instructions / 1000))
     df["dram_inst_share"] = df.dram_flits / df.instructions
-
-    if metrics is None:
-        return df
-    if preprocess_data is not None:
-        df = preprocess_data(df, name)
-    return df[["progname"] + metrics]
+    return df
 
 
 def progname_mapping_olden(n):
@@ -101,7 +113,7 @@ def progname_mapping_olden(n):
         "perimeter 10 0_exec": "perimeter (exec)",
         "mst 1024 0_alloc": "mst (alloc)",
         "mst 1024 0_exec": "mst (exec)"
-    }.get(n, n)
+        }.get(n, n)
 
 
 def progname_mapping_mibench(name):
@@ -109,16 +121,18 @@ def progname_mapping_mibench(name):
 
 
 def generate_hardware_results_csv(files: Dict[str, typing.Union[Path, Iterable[Path]]], output_file: Path,
-                                  progname_mapping: Callable[[str], str] = None):
+                                  progname_mapping: Callable[[str], str] = None, include_additional_derived_props=True):
     dfs = []
     for k, v in files.items():
-        df = _load_statcounters_csv(v, metrics=None, preprocess_data=None, name="hwresults")
+        df = _load_statcounters_csv(v, metrics=None, preprocess_data=None, name="hwresults",
+                                    include_additional_derived_props=include_additional_derived_props)
         df.insert(0, 'target-arch-cpu', k)
         # old analysis script expects these values
         df.insert(0, 'sdk-cpu', "cheri128")
         df.insert(0, 'bitfile-cpu', "cheri128")
         df.insert(0, 'table-struct', "0_256")
-        df = df.assign(l2cache_misses=lambda x: x.l2cache_read_miss + x.l2cache_write_miss)
+        if 'l2cache_read_miss' in df.columns and 'l2cache_write_miss' in df.columns:
+            df = df.assign(l2cache_misses=lambda x: x.l2cache_read_miss + x.l2cache_write_miss)
         del df['archname']
         dfs.append(df)
     df = pd.concat(dfs)
@@ -138,7 +152,7 @@ def _default_metric_mapping(m: str, variant: str):
         "l2cache_flits": "L2-cache flits",
         "dram_req_flits": "DRAM requests",
         "dram_flits": "DRAM flits",
-    }.get(m, m)
+        }.get(m, m)
 
 
 def _default_metric_mapping_with_variant(m: str, variant: str):
@@ -220,7 +234,7 @@ class BarResults:
             text=["{0:.2f}%".format(x * 100) for x in y_values] if text_in_bar else None,
             # textfont=dict(size=18),
             textposition='auto',
-        )
+            )
         if customize_bar is not None:
             x = customize_bar(self, x)
         return x
@@ -237,8 +251,8 @@ def reduce_saturation(colour, howmuch):
     return result
 
 
-def plot_csvs_relative(files: Dict[str, typing.Union[Path, Iterable[Path]]],
-                       baseline: typing.Union[Path, Iterable[Path]], *,
+def plot_csvs_relative(files: Dict[str, typing.Union[Path, Iterable[Path], pd.DataFrame, Callable[[], pd.DataFrame]]],
+                       baseline: typing.Union[Path, Iterable[Path], pd.DataFrame, Callable[[], pd.DataFrame]], *,
                        label: str = "Relative overhead compared to baseline",
                        metrics: List[str] = None, metric_mapping: Callable[[str, str], str] = _default_metric_mapping,
                        progname_mapping: Callable[[str], str] = _default_progname_mapping,
@@ -247,7 +261,8 @@ def plot_csvs_relative(files: Dict[str, typing.Union[Path, Iterable[Path]]],
                        preprocess_data: Callable[["pd.DataFrame", str], pd.DataFrame] = None,
                        include_progname_filter: Callable[[str], bool] = None,
                        add_summary_bars=None,
-                       error_bar_args: go.bar.ErrorY = None) -> Tuple[go.Figure, List[BarResults]]:
+                       error_bar_args: go.bar.ErrorY = None,
+                       include_additional_derived_props=True) -> Tuple[go.Figure, List[BarResults]]:
     if add_summary_bars is None:
         add_summary_bars = [SummaryBar.ArithmeticMean]
     if metrics is None:
@@ -256,7 +271,8 @@ def plot_csvs_relative(files: Dict[str, typing.Union[Path, Iterable[Path]]],
     if metric_mapping is _default_metric_mapping and include_variant_in_legend:
         metric_mapping = _default_metric_mapping_with_variant
 
-    baseline_df = _load_statcounters_csv(baseline, metrics, preprocess_data, "baseline")
+    baseline_df = _load_statcounters_csv(baseline, metrics, preprocess_data, "baseline",
+                                         include_additional_derived_props=include_additional_derived_props)
     baseline_medians = baseline_df.groupby("progname").median()
     fig = go.Figure()
     bar_results = []
@@ -264,7 +280,8 @@ def plot_csvs_relative(files: Dict[str, typing.Union[Path, Iterable[Path]]],
     # First by metric, then by configuration (ensures that e.g. cycles are consecutive and can be compared easily)
     for metric in metrics:
         for name, csv in files.items():
-            orig_df = _load_statcounters_csv(csv, metrics, preprocess_data, name)
+            orig_df = _load_statcounters_csv(csv, metrics, preprocess_data, name,
+                                             include_additional_derived_props=include_additional_derived_props)
             # Normalize by basline median
             df = orig_df.apply(_normalize_values, axis=1, args=(baseline_medians,))  # type: pd.DataFrame
             # df["variant"] = name
@@ -306,7 +323,7 @@ def plot_csvs_relative(files: Dict[str, typing.Union[Path, Iterable[Path]]],
                 opacity=0.5,
                 layer="below",
                 line_width=0,
-            )
+                )
             print("Adding shaded background from", s.x0, "to", s.x1)
             shapes.append(s)
 
@@ -314,7 +331,7 @@ def plot_csvs_relative(files: Dict[str, typing.Union[Path, Iterable[Path]]],
         barmode='group',
         yaxis=yaxis, shapes=shapes,
         showlegend=True,
-    )
+        )
     fig.update_yaxes(automargin=True, hoverformat=".2%")
     fig.update_xaxes(automargin=True)
     if tick_angle:
@@ -324,8 +341,8 @@ def plot_csvs_relative(files: Dict[str, typing.Union[Path, Iterable[Path]]],
             r=0,
             b=0,
             t=0,
-        ),
-    )
+            ),
+        )
     if legend_inside:
         fig.update_layout(
             legend=go.layout.Legend(
@@ -340,8 +357,8 @@ def plot_csvs_relative(files: Dict[str, typing.Union[Path, Iterable[Path]]],
                 bgcolor="rgba(255, 255, 255, 0.5)",
                 bordercolor="Black",
                 borderwidth=2
+                )
             )
-        )
 
     return fig, bar_results
 
